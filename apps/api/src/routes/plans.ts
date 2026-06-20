@@ -2,7 +2,7 @@ import { and, asc, desc, eq, inArray } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { db } from '../db/client.js';
-import { approvals, auditLogs, drpPlans, drpSections, notifications, planComments, users } from '../db/schema/index.js';
+import { approvals, auditLogs, drpPlans, drpSections, notifications, planComments, planVersions, users } from '../db/schema/index.js';
 import { ISO_22301_SECTIONS, defaultSectionContent } from '../drp/iso-template.js';
 import { renderDocxPayload, renderMarkdownPayload, renderPdfPayload } from '../drp/export-service.js';
 import { requireAuth, requireRole } from '../auth/auth-service.js';
@@ -165,6 +165,29 @@ export async function planRoutes(app: FastifyInstance) {
     if (!section) return reply.code(404).send({ type: 'about:blank', title: 'Not Found', status: 404, detail: 'Section not found', instance: req.id });
     await audit(user.tenantId, user.id, 'drp_section', section.id, 'update', `Updated section ${section.title}`, { planId: id, sectionKey });
     return section;
+  });
+
+  app.get('/api/v1/plans/:id/versions', async (req, reply) => {
+    const user = await requireAuth(req);
+    const { id } = z.object({ id: z.string().uuid() }).parse(req.params);
+    const plan = await getPlanWithSections(id, user.tenantId);
+    if (!plan) return reply.code(404).send({ type: 'about:blank', title: 'Not Found', status: 404, detail: 'Plan not found', instance: req.id });
+    const versions = await db.select().from(planVersions).where(eq(planVersions.planId, id)).orderBy(desc(planVersions.version));
+    return { versions };
+  });
+
+  app.post('/api/v1/plans/:id/versions', async (req, reply) => {
+    const user = await requireAuth(req);
+    requireRole(user, ['admin', 'coordinator', 'owner']);
+    const { id } = z.object({ id: z.string().uuid() }).parse(req.params);
+    const body = z.object({ changeSummary: z.string().optional() }).parse(req.body ?? {});
+    const plan = await getPlanWithSections(id, user.tenantId);
+    if (!plan) return reply.code(404).send({ type: 'about:blank', title: 'Not Found', status: 404, detail: 'Plan not found', instance: req.id });
+    const nextVersion = plan.version + 1;
+    const [version] = await db.insert(planVersions).values({ planId: id, version: nextVersion, snapshot: plan, changeSummary: body.changeSummary ?? `Snapshot version ${nextVersion}`, createdBy: user.id }).returning();
+    await db.update(drpPlans).set({ version: nextVersion, updatedBy: user.id, updatedAt: new Date() }).where(and(eq(drpPlans.id, id), eq(drpPlans.tenantId, user.tenantId)));
+    await audit(user.tenantId, user.id, 'plan_version', version.id, 'create', `Created version ${nextVersion} for ${plan.title}`, { planId: id });
+    return reply.code(201).send(version);
   });
 
   app.get('/api/v1/plans/:id/comments', async (req, reply) => {

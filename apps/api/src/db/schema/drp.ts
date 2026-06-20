@@ -94,6 +94,25 @@ export const drpSections = pgTable(
   }),
 );
 
+export const planVersions = pgTable(
+  'plan_versions',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    planId: uuid('plan_id')
+      .references(() => drpPlans.id, { onDelete: 'cascade' })
+      .notNull(),
+    version: integer('version').notNull(),
+    snapshot: jsonb('snapshot').$type<Record<string, unknown>>().notNull(),
+    changeSummary: text('change_summary').default('').notNull(),
+    createdBy: uuid('created_by').references(() => users.id, { onDelete: 'set null' }),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+  },
+  (table) => ({
+    planIdx: index('plan_versions_plan_id_idx').on(table.planId),
+    planVersionUnique: uniqueIndex('plan_versions_plan_version_unique').on(table.planId, table.version),
+  }),
+);
+
 export const approvals = pgTable(
   'approvals',
   {
@@ -138,4 +157,5 @@ export type Session = typeof sessions.$inferSelect;
 export type DrpPlan = typeof drpPlans.$inferSelect;
 export type NewDrpPlan = typeof drpPlans.$inferInsert;
 export type DrpSection = typeof drpSections.$inferSelect;
+export type PlanVersion = typeof planVersions.$inferSelect;
 export type AuditLog = typeof auditLogs.$inferSelect;

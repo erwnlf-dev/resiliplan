@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, Route, Routes, useNavigate, useParams } from 'react-router-dom';
-import { AlertTriangle, Calendar, CheckCircle2, Download, FileText, Home, Lock, LogOut, Save, Send, Server, Sparkles } from 'lucide-react';
+import { AlertTriangle, Calendar, CheckCircle2, Download, FileText, Home, Lock, LogOut, Save, Send, Server, Sparkles, Users } from 'lucide-react';
+import * as Y from 'yjs';
+import { WebsocketProvider } from 'y-websocket';
 
 type User = { id: string; email: string; name: string; role: 'admin' | 'coordinator' | 'owner' | 'viewer'; mfaEnabled: boolean };
 type Section = { id: string; sectionKey: string; title: string; isoClause: string; order: number; contentMarkdown: string; status: string };
@@ -24,8 +26,10 @@ type ResilienceSummary = { totalAssets: number; criticalAssets: number; priority
 type BiaEntry = { id: string; serviceName: string; processName: string; owner: string; impact1h: number; impact4h: number; impact24h: number; financialImpact: number; reputationalImpact: number; regulatoryImpact: number; maxImpactScore: number; criticalityTier: string; currentRtoMinutes: number; currentRpoMinutes: number; dependencyNotes: string; workaround: string };
 type BiaSummary = { totalBia: number; tier1: number; tier2: number; fastestRtoMinutes: number | null; fastestRpoMinutes: number | null };
 type PlanComment = { id: string; sectionKey: string; body: string; status: 'open' | 'resolved'; parentCommentId?: string | null; mentionedEmails?: string[]; createdAt: string };
+type ManagedUser = { id: string; email: string; name: string; role: User['role']; disabled: boolean; mfaEnabled: boolean; createdAt: string };
 
 const API = import.meta.env.VITE_API_URL ?? `${window.location.protocol}//${window.location.hostname}:3001`;
+const COLLAB_WS = import.meta.env.VITE_COLLAB_WS_URL ?? `ws://${window.location.hostname}:3002`;
 
 function cookieValue(name: string): string | undefined {
   return document.cookie
@@ -103,6 +107,7 @@ function Shell({ user, onUserUpdate, onLogout }: { user: User; onUserUpdate: (us
           <NavLink to="/assets" icon={<Server className="h-4 w-4" />}>Assets</NavLink>
           <NavLink to="/risks" icon={<AlertTriangle className="h-4 w-4" />}>Risks</NavLink>
           <NavLink to="/drills" icon={<Calendar className="h-4 w-4" />}>Drills</NavLink>
+          <NavLink to="/users" icon={<Users className="h-4 w-4" />}>Users</NavLink>
           <NavLink to="/security" icon={<Lock className="h-4 w-4" />}>Security</NavLink>
         </nav></aside>
         <main className="flex-1"><Routes>
@@ -113,6 +118,7 @@ function Shell({ user, onUserUpdate, onLogout }: { user: User; onUserUpdate: (us
           <Route path="/assets" element={<AssetsPage />} />
           <Route path="/risks" element={<RisksPage />} />
           <Route path="/drills" element={<DrillsPage />} />
+          <Route path="/users" element={<UsersPage />} />
           <Route path="/security" element={<SecurityPage user={user} onUserUpdate={onUserUpdate} />} />
           <Route path="*" element={<NotFound />} />
         </Routes></main>
@@ -212,6 +218,8 @@ function PlanEditor() {
   const [replyTo, setReplyTo] = useState<string | null>(null);
   const [aiSuggestion, setAiSuggestion] = useState('');
   const [aiLoading, setAiLoading] = useState(false);
+  const [collabStatus, setCollabStatus] = useState('offline');
+  const [collabUsers, setCollabUsers] = useState(1);
   const [error, setError] = useState('');
   async function load() {
     if (!id) return;
@@ -223,6 +231,22 @@ function PlanEditor() {
     catch (err) { setError(err instanceof Error ? err.message : 'Failed to load plan'); }
   }
   useEffect(() => { void load(); }, [id]);
+
+  useEffect(() => {
+    if (!id) return;
+    const doc = new Y.Doc();
+    const provider = new WebsocketProvider(COLLAB_WS, `drp-plan-${id}`, doc);
+    provider.awareness.setLocalStateField('user', { name: 'Current reviewer', color: '#2563eb' });
+    const updatePresence = () => setCollabUsers(Array.from(provider.awareness.getStates().keys()).length || 1);
+    provider.on('status', (event: { status: string }) => setCollabStatus(event.status));
+    provider.awareness.on('change', updatePresence);
+    updatePresence();
+    return () => {
+      provider.awareness.off('change', updatePresence);
+      provider.destroy();
+      doc.destroy();
+    };
+  }, [id]);
 
   const section = plan?.sections?.find((s) => s.sectionKey === selected);
   useEffect(() => { setDraft(section?.contentMarkdown ?? ''); }, [section?.id]);
@@ -285,7 +309,7 @@ function PlanEditor() {
   if (!plan) return <Centered>Loading plan...</Centered>;
   const currentComments = comments.filter((comment) => comment.sectionKey === selected);
 
-  return <div className="space-y-4"><div className="flex items-start justify-between"><div><Link to="/plans" className="text-sm text-primary hover:underline">← Back to plans</Link><h1 className="mt-1 text-2xl font-bold">{plan.title}</h1><p className="text-sm text-muted-foreground">{plan.serviceName} · version {plan.version} · RTO {plan.rtoMinutes}m · RPO {plan.rpoMinutes}m</p></div><div className="flex items-center gap-2"><StatusBadge status={plan.status} /><button onClick={submitReview} className="inline-flex items-center gap-1 rounded-md border px-3 py-2 text-sm"><Send className="h-4 w-4" /> Submit</button><button onClick={approve} className="inline-flex items-center gap-1 rounded-md bg-green-600 px-3 py-2 text-sm text-white"><CheckCircle2 className="h-4 w-4" /> Approve</button></div></div>
+  return <div className="space-y-4"><div className="flex items-start justify-between"><div><Link to="/plans" className="text-sm text-primary hover:underline">← Back to plans</Link><h1 className="mt-1 text-2xl font-bold">{plan.title}</h1><p className="text-sm text-muted-foreground">{plan.serviceName} · version {plan.version} · RTO {plan.rtoMinutes}m · RPO {plan.rpoMinutes}m</p><p className="mt-1 text-xs text-muted-foreground">Realtime collaboration: {collabStatus} · {collabUsers} active editor(s)</p></div><div className="flex items-center gap-2"><StatusBadge status={plan.status} /><button onClick={submitReview} className="inline-flex items-center gap-1 rounded-md border px-3 py-2 text-sm"><Send className="h-4 w-4" /> Submit</button><button onClick={approve} className="inline-flex items-center gap-1 rounded-md bg-green-600 px-3 py-2 text-sm text-white"><CheckCircle2 className="h-4 w-4" /> Approve</button></div></div>
     {message && <div className="rounded-md border border-green-200 bg-green-50 p-3 text-sm text-green-700">{message}</div>}
     <div className="grid gap-4 lg:grid-cols-[280px_1fr]"><aside className="rounded-lg border bg-card p-3"><div className="mb-2 text-sm font-medium">14 ISO 22301 Sections</div><div className="space-y-1">{plan.sections?.map((s) => <button key={s.id} onClick={() => setSelected(s.sectionKey)} className={`w-full rounded-md px-3 py-2 text-left text-sm ${s.sectionKey === selected ? 'bg-primary text-white' : 'hover:bg-muted'}`}><div className="font-medium">{s.order}. {s.title.replace(/^\d+\. /, '')}</div><div className="text-xs opacity-75">{s.isoClause}</div></button>)}</div></aside>
       <section className="rounded-lg border bg-card"><div className="flex items-center justify-between border-b p-4"><div><h2 className="font-semibold">{section?.title}</h2><p className="text-xs text-muted-foreground">Compliance badge: {section?.isoClause}</p></div><div className="flex gap-2"><button onClick={suggestWithAI} disabled={aiLoading} className="inline-flex items-center gap-1 rounded-md border px-3 py-2 text-sm disabled:opacity-50"><Sparkles className="h-4 w-4" /> {aiLoading ? 'AI drafting...' : 'AI Suggest'}</button><button onClick={saveSection} className="inline-flex items-center gap-1 rounded-md bg-primary px-3 py-2 text-sm text-white"><Save className="h-4 w-4" /> Save</button></div></div><textarea value={draft} onChange={(e) => setDraft(e.target.value)} className="h-[520px] w-full resize-none p-4 font-mono text-sm outline-none" /></section></div>
@@ -404,6 +428,23 @@ function DrillsPage() {
     } catch (err) { setError(err instanceof Error ? err.message : 'Create drill failed'); }
   }
   return <RegisterPage title="Drills" subtitle="Recovery exercise calendar and result tracking." error={error}><form onSubmit={submit} className="grid gap-3 rounded-lg border bg-card p-4 md:grid-cols-2"><Input name="serviceName" label="Service" required /><Input name="drillTitle" label="Drill title" required /><Input name="scheduledAt" label="Schedule" type="datetime-local" required /><Input name="owner" label="Owner" required /><label className="text-sm font-medium md:col-span-2">Scope<textarea name="scope" className="mt-1 h-20 w-full rounded-md border px-3 py-2" required /></label><div className="md:col-span-2"><button className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-white">Schedule drill</button></div></form><SimpleTable headers={['Service','Drill','Schedule','Owner','Status']} rows={drills.map((drill) => [drill.serviceName, drill.drillTitle, new Date(drill.scheduledAt).toLocaleString(), drill.owner, drill.status])} empty="No drills scheduled." /></RegisterPage>;
+}
+
+function UsersPage() {
+  const [users, setUsers] = useState<ManagedUser[]>([]);
+  const [error, setError] = useState('');
+  async function load() { try { setUsers((await api<{ users: ManagedUser[] }>('/api/v1/users')).users); } catch (err) { setError(err instanceof Error ? err.message : 'Failed to load users'); } }
+  useEffect(() => { void load(); }, []);
+  async function submit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault(); setError('');
+    const form = event.currentTarget;
+    const data = new FormData(form);
+    try {
+      await api<ManagedUser>('/api/v1/users', { method: 'POST', body: JSON.stringify({ email: data.get('email'), name: data.get('name'), role: data.get('role'), password: data.get('password') }) });
+      form.reset(); await load();
+    } catch (err) { setError(err instanceof Error ? err.message : 'Create user failed'); }
+  }
+  return <RegisterPage title="Users" subtitle="Tenant user management and RBAC foundation." error={error}><form onSubmit={submit} className="grid gap-3 rounded-lg border bg-card p-4 md:grid-cols-4"><Input name="email" label="Email" type="email" required /><Input name="name" label="Name" required /><label className="text-sm font-medium">Role<select name="role" defaultValue="viewer" className="mt-1 w-full rounded-md border px-3 py-2"><option value="admin">Admin</option><option value="coordinator">Coordinator</option><option value="owner">Owner</option><option value="viewer">Viewer</option></select></label><Input name="password" label="Temporary password" type="password" required /><div className="md:col-span-4"><button className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-white">Create user</button></div></form><SimpleTable headers={['Email','Name','Role','MFA','Status']} rows={users.map((item) => [item.email, item.name, item.role, item.mfaEnabled ? 'enabled' : 'off', item.disabled ? 'disabled' : 'active'])} empty="No users found." /></RegisterPage>;
 }
 
 function RegisterPage({ title, subtitle, error, children }: { title: string; subtitle: string; error: string; children: React.ReactNode }) { return <div className="space-y-6"><div><h1 className="text-2xl font-bold">{title}</h1><p className="text-sm text-muted-foreground">{subtitle}</p></div>{error && <ErrorBox message={error} />}{children}</div>; }
