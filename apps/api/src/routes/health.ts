@@ -11,6 +11,7 @@ import { config } from '../config/index.js';
 import { db, pool } from '../db/client.js';
 import { drpPlans, notifications, recoveryDrills, serviceRisks, users } from '../db/schema/index.js';
 import { requireAuth } from '../auth/auth-service.js';
+import { evaluateProductionReadiness } from '../readiness/readiness-service.js';
 
 export async function healthRoutes(app: FastifyInstance) {
   // Liveness — is the process alive?
@@ -116,5 +117,20 @@ export async function healthRoutes(app: FastifyInstance) {
         memoryUsageMB: Math.round(process.memoryUsage().heapUsed / 1024 / 1024),
       },
     };
+  });
+
+  app.get('/api/v1/readiness', async (req) => {
+    await requireAuth(req);
+    const migrationResult = await pool.query('SELECT count(*)::int AS count FROM _resiliplan_migrations');
+    const smtpConfigured = Boolean(config.SMTP_HOST && config.SMTP_PORT && config.SMTP_FROM);
+    return evaluateProductionReadiness({
+      nodeEnv: config.NODE_ENV,
+      appUrl: config.APP_URL,
+      apiUrl: config.API_URL,
+      encryptionKey: config.API_KEY_ENCRYPTION_KEY,
+      corsOrigins: config.CORS_ORIGINS,
+      smtpConfigured,
+      migrationsApplied: migrationResult.rows[0]?.count ?? 0,
+    });
   });
 }

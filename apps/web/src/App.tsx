@@ -32,6 +32,7 @@ type NotificationItem = { id: string; title: string; body: string; type: string;
 type MonitoringSummary = { status: string; timestamp: string; counters: { plans: number; users: number; risks: number; drills: number; notifications: number }; system: { uptimeSeconds: number; memoryUsageMB: number } };
 type BillingSummary = { subscription: { planCode: string; status: string; seatsLimit: number; plansLimit: number; aiRequestsLimit: number; currentPeriodEnd: string }; usage: Record<string, number> };
 type EmailOutboxItem = { id: string; toEmail: string; subject: string; bodyText: string; emailType: string; status: 'queued' | 'sent' | 'failed' | 'cancelled'; lastError?: string | null; queuedAt: string };
+type ReadinessSummary = { status: string; failed: number; warnings: number; checks: Array<{ key: string; label: string; status: 'pass' | 'warn' | 'fail'; detail: string }> };
 
 const API = import.meta.env.VITE_API_URL ?? `${window.location.protocol}//${window.location.hostname}:3001`;
 const COLLAB_WS = import.meta.env.VITE_COLLAB_WS_URL ?? `ws://${window.location.hostname}:3002`;
@@ -117,6 +118,7 @@ function Shell({ user, onUserUpdate, onLogout }: { user: User; onUserUpdate: (us
           <NavLink to="/monitoring" icon={<Activity className="h-4 w-4" />}>Monitoring</NavLink>
           <NavLink to="/billing" icon={<CreditCard className="h-4 w-4" />}>Billing</NavLink>
           <NavLink to="/email-outbox" icon={<Mail className="h-4 w-4" />}>Email Outbox</NavLink>
+          <NavLink to="/readiness" icon={<CheckCircle2 className="h-4 w-4" />}>Readiness</NavLink>
           <NavLink to="/security" icon={<Lock className="h-4 w-4" />}>Security</NavLink>
         </nav></aside>
         <main className="flex-1"><Routes>
@@ -132,6 +134,7 @@ function Shell({ user, onUserUpdate, onLogout }: { user: User; onUserUpdate: (us
           <Route path="/monitoring" element={<MonitoringPage />} />
           <Route path="/billing" element={<BillingPage />} />
           <Route path="/email-outbox" element={<EmailOutboxPage />} />
+          <Route path="/readiness" element={<ReadinessPage />} />
           <Route path="/security" element={<SecurityPage user={user} onUserUpdate={onUserUpdate} />} />
           <Route path="*" element={<NotFound />} />
         </Routes></main>
@@ -510,6 +513,14 @@ function EmailOutboxPage() {
   useEffect(() => { void load(); }, []);
   async function updateStatus(id: string, status: EmailOutboxItem['status']) { await api<EmailOutboxItem>(`/api/v1/email-outbox/${id}`, { method: 'PATCH', body: JSON.stringify({ status }) }); await load(); }
   return <RegisterPage title="Email Outbox" subtitle={`${queued} queued draft email(s). Outbound SMTP is approval/config gated.`} error={error}>{emails.length === 0 ? <div className="rounded-lg border bg-card p-6 text-sm text-muted-foreground">No queued emails.</div> : <div className="space-y-3">{emails.map((email) => <div key={email.id} className="rounded-lg border bg-card p-4 text-sm"><div className="flex items-start justify-between gap-4"><div><div className="font-medium">{email.subject}</div><div className="text-muted-foreground">{email.emailType} · to {email.toEmail} · {new Date(email.queuedAt).toLocaleString()}</div><pre className="mt-3 max-h-40 overflow-auto whitespace-pre-wrap rounded-md bg-muted/40 p-3 text-xs">{email.bodyText}</pre>{email.lastError && <p className="mt-2 text-xs text-red-600">Last error: {email.lastError}</p>}</div><div className="flex shrink-0 flex-col gap-2"><StatusBadge status={email.status} />{email.status === 'queued' && <><button onClick={() => updateStatus(email.id, 'sent')} className="rounded-md border px-3 py-2 text-xs">Mark sent</button><button onClick={() => updateStatus(email.id, 'cancelled')} className="rounded-md border px-3 py-2 text-xs">Cancel</button></>}</div></div></div>)}</div>}</RegisterPage>;
+}
+
+function ReadinessPage() {
+  const [summary, setSummary] = useState<ReadinessSummary | null>(null);
+  const [error, setError] = useState('');
+  useEffect(() => { api<ReadinessSummary>('/api/v1/readiness').then(setSummary).catch((err) => setError(err instanceof Error ? err.message : 'Failed to load readiness')); }, []);
+  const badgeClass = (status: string) => status === 'pass' ? 'border-green-200 bg-green-50 text-green-700' : status === 'warn' ? 'border-yellow-200 bg-yellow-50 text-yellow-800' : 'border-red-200 bg-red-50 text-red-700';
+  return <RegisterPage title="Production Readiness" subtitle="Internal go-live checks for a professional operating posture." error={error}>{!summary ? <Centered>Loading readiness...</Centered> : <><div className="grid gap-4 sm:grid-cols-3"><KpiCard label="Overall" value={summary.status} hint="readiness state" /><KpiCard label="Warnings" value={`${summary.warnings}`} hint="needs decision" /><KpiCard label="Failures" value={`${summary.failed}`} hint="must fix" /></div><div className="space-y-2">{summary.checks.map((check) => <div key={check.key} className={`rounded-lg border p-4 text-sm ${badgeClass(check.status)}`}><div className="flex items-center justify-between"><div className="font-medium">{check.label}</div><span className="uppercase">{check.status}</span></div><p className="mt-2">{check.detail}</p></div>)}</div></>}</RegisterPage>;
 }
 
 function UsersPage() {
