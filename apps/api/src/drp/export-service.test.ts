@@ -29,14 +29,19 @@ describe('export-service', () => {
   it('renders a PDF payload with valid PDF header', () => {
     const pdf = renderPdfPayload(plan);
     expect(pdf.contentType).toBe('application/pdf');
-    expect(pdf.body.startsWith('%PDF-1.4')).toBe(true);
+    expect(typeof pdf.body).toBe('string');
+    expect((pdf.body as string).startsWith('%PDF-1.4')).toBe(true);
     expect(pdf.filename).toBe('Core Service.pdf');
   });
 
-  it('renders a docx-compatible payload with explicit limitation note', () => {
+  it('renders a real DOCX OOXML package', () => {
     const docx = renderDocxPayload(plan);
     expect(docx.contentType).toBe('application/vnd.openxmlformats-officedocument.wordprocessingml.document');
-    expect(docx.body).toContain('DOCX placeholder');
+    expect(Buffer.isBuffer(docx.body)).toBe(true);
+    const body = docx.body as Buffer;
+    expect(body.subarray(0, 2).toString('utf8')).toBe('PK');
+    expect(body.toString('utf8')).toContain('[Content_Types].xml');
+    expect(body.toString('utf8')).toContain('word/document.xml');
     expect(docx.filename).toBe('Core Service.docx');
   });
 });
