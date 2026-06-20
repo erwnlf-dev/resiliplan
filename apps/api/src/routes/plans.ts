@@ -2,10 +2,11 @@ import { and, asc, eq } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { db } from '../db/client.js';
-import { approvals, auditLogs, drpPlans, drpSections } from '../db/schema/index.js';
+import { approvals, auditLogs, drpPlans, drpSections, planComments } from '../db/schema/index.js';
 import { ISO_22301_SECTIONS, defaultSectionContent } from '../drp/iso-template.js';
 import { renderDocxPayload, renderMarkdownPayload, renderPdfPayload } from '../drp/export-service.js';
 import { requireAuth, requireRole } from '../auth/auth-service.js';
+import { createCommentSchema, summarizeComments, updateCommentSchema } from '../comments/comment-service.js';
 
 const createPlanSchema = z.object({
   title: z.string().min(3),
@@ -122,6 +123,40 @@ export async function planRoutes(app: FastifyInstance) {
     if (!section) return reply.code(404).send({ type: 'about:blank', title: 'Not Found', status: 404, detail: 'Section not found', instance: req.id });
     await audit(user.tenantId, user.id, 'drp_section', section.id, 'update', `Updated section ${section.title}`, { planId: id, sectionKey });
     return section;
+  });
+
+  app.get('/api/v1/plans/:id/comments', async (req, reply) => {
+    const user = await requireAuth(req);
+    const { id } = z.object({ id: z.string().uuid() }).parse(req.params);
+    const plan = await getPlanWithSections(id, user.tenantId);
+    if (!plan) return reply.code(404).send({ type: 'about:blank', title: 'Not Found', status: 404, detail: 'Plan not found', instance: req.id });
+    const comments = await db.select().from(planComments).where(eq(planComments.planId, id)).orderBy(asc(planComments.createdAt));
+    return { comments, summary: summarizeComments(comments) };
+  });
+
+  app.post('/api/v1/plans/:id/comments', async (req, reply) => {
+    const user = await requireAuth(req);
+    requireRole(user, ['admin', 'coordinator', 'owner']);
+    const { id } = z.object({ id: z.string().uuid() }).parse(req.params);
+    const body = createCommentSchema.parse(req.body);
+    const plan = await getPlanWithSections(id, user.tenantId);
+    if (!plan) return reply.code(404).send({ type: 'about:blank', title: 'Not Found', status: 404, detail: 'Plan not found', instance: req.id });
+    const [comment] = await db.insert(planComments).values({ planId: id, createdBy: user.id, updatedBy: user.id, ...body }).returning();
+    await audit(user.tenantId, user.id, 'plan_comment', comment.id, 'create', `Added comment on ${body.sectionKey}`, { planId: id, sectionKey: body.sectionKey });
+    return reply.code(201).send(comment);
+  });
+
+  app.patch('/api/v1/plans/:id/comments/:commentId', async (req, reply) => {
+    const user = await requireAuth(req);
+    requireRole(user, ['admin', 'coordinator', 'owner']);
+    const { id, commentId } = z.object({ id: z.string().uuid(), commentId: z.string().uuid() }).parse(req.params);
+    const body = updateCommentSchema.parse(req.body);
+    const plan = await getPlanWithSections(id, user.tenantId);
+    if (!plan) return reply.code(404).send({ type: 'about:blank', title: 'Not Found', status: 404, detail: 'Plan not found', instance: req.id });
+    const [comment] = await db.update(planComments).set({ ...body, updatedBy: user.id, updatedAt: new Date() }).where(and(eq(planComments.id, commentId), eq(planComments.planId, id))).returning();
+    if (!comment) return reply.code(404).send({ type: 'about:blank', title: 'Not Found', status: 404, detail: 'Comment not found', instance: req.id });
+    await audit(user.tenantId, user.id, 'plan_comment', comment.id, 'update', `Updated comment ${comment.id}`, { planId: id, status: comment.status });
+    return comment;
   });
 
   app.post('/api/v1/plans/:id/submit', async (req, reply) => {

@@ -23,6 +23,7 @@ type RecoveryDrill = { id: string; serviceName: string; drillTitle: string; sche
 type ResilienceSummary = { totalAssets: number; criticalAssets: number; priorityRecoveryAssets: number; openRisks: number; highRisks: number; plannedDrills: number; completedDrills: number };
 type BiaEntry = { id: string; serviceName: string; processName: string; owner: string; impact1h: number; impact4h: number; impact24h: number; financialImpact: number; reputationalImpact: number; regulatoryImpact: number; maxImpactScore: number; criticalityTier: string; currentRtoMinutes: number; currentRpoMinutes: number; dependencyNotes: string; workaround: string };
 type BiaSummary = { totalBia: number; tier1: number; tier2: number; fastestRtoMinutes: number | null; fastestRpoMinutes: number | null };
+type PlanComment = { id: string; sectionKey: string; body: string; status: 'open' | 'resolved'; createdAt: string };
 
 const API = import.meta.env.VITE_API_URL ?? `${window.location.protocol}//${window.location.hostname}:3001`;
 
@@ -206,11 +207,16 @@ function PlanEditor() {
   const [selected, setSelected] = useState('context');
   const [draft, setDraft] = useState('');
   const [message, setMessage] = useState('');
+  const [comments, setComments] = useState<PlanComment[]>([]);
+  const [commentBody, setCommentBody] = useState('');
   const [error, setError] = useState('');
-
   async function load() {
     if (!id) return;
-    try { const loaded = await api<Plan>(`/api/v1/plans/${id}`); setPlan(loaded); setSelected(loaded.sections?.[0]?.sectionKey ?? 'context'); setDraft(loaded.sections?.[0]?.contentMarkdown ?? ''); }
+    try {
+      const loaded = await api<Plan>(`/api/v1/plans/${id}`);
+      const commentData = await api<{ comments: PlanComment[] }>(`/api/v1/plans/${id}/comments`);
+      setPlan(loaded); setComments(commentData.comments); setSelected(loaded.sections?.[0]?.sectionKey ?? 'context'); setDraft(loaded.sections?.[0]?.contentMarkdown ?? '');
+    }
     catch (err) { setError(err instanceof Error ? err.message : 'Failed to load plan'); }
   }
   useEffect(() => { void load(); }, [id]);
@@ -225,14 +231,26 @@ function PlanEditor() {
   }
   async function submitReview() { if (!id) return; setPlan(await api<Plan>(`/api/v1/plans/${id}/submit`, { method: 'POST' })); setMessage('Submitted for approval.'); }
   async function approve() { if (!id) return; const signatureText = prompt('Approval signature text'); if (!signatureText) return; setPlan(await api<Plan>(`/api/v1/plans/${id}/approve`, { method: 'POST', body: JSON.stringify({ signatureText }) })); setMessage('Approved and signed.'); }
+  async function addComment() {
+    if (!id || !section || !commentBody.trim()) return;
+    const comment = await api<PlanComment>(`/api/v1/plans/${id}/comments`, { method: 'POST', body: JSON.stringify({ sectionKey: section.sectionKey, body: commentBody }) });
+    setComments((current) => [...current, comment]); setCommentBody(''); setMessage('Comment added.');
+  }
+  async function resolveComment(commentId: string) {
+    if (!id) return;
+    const updated = await api<PlanComment>(`/api/v1/plans/${id}/comments/${commentId}`, { method: 'PATCH', body: JSON.stringify({ status: 'resolved' }) });
+    setComments((current) => current.map((comment) => comment.id === updated.id ? updated : comment));
+  }
 
   if (error) return <ErrorBox message={error} />;
   if (!plan) return <Centered>Loading plan...</Centered>;
+  const currentComments = comments.filter((comment) => comment.sectionKey === selected);
 
   return <div className="space-y-4"><div className="flex items-start justify-between"><div><Link to="/plans" className="text-sm text-primary hover:underline">← Back to plans</Link><h1 className="mt-1 text-2xl font-bold">{plan.title}</h1><p className="text-sm text-muted-foreground">{plan.serviceName} · version {plan.version} · RTO {plan.rtoMinutes}m · RPO {plan.rpoMinutes}m</p></div><div className="flex items-center gap-2"><StatusBadge status={plan.status} /><button onClick={submitReview} className="inline-flex items-center gap-1 rounded-md border px-3 py-2 text-sm"><Send className="h-4 w-4" /> Submit</button><button onClick={approve} className="inline-flex items-center gap-1 rounded-md bg-green-600 px-3 py-2 text-sm text-white"><CheckCircle2 className="h-4 w-4" /> Approve</button></div></div>
     {message && <div className="rounded-md border border-green-200 bg-green-50 p-3 text-sm text-green-700">{message}</div>}
     <div className="grid gap-4 lg:grid-cols-[280px_1fr]"><aside className="rounded-lg border bg-card p-3"><div className="mb-2 text-sm font-medium">14 ISO 22301 Sections</div><div className="space-y-1">{plan.sections?.map((s) => <button key={s.id} onClick={() => setSelected(s.sectionKey)} className={`w-full rounded-md px-3 py-2 text-left text-sm ${s.sectionKey === selected ? 'bg-primary text-white' : 'hover:bg-muted'}`}><div className="font-medium">{s.order}. {s.title.replace(/^\d+\. /, '')}</div><div className="text-xs opacity-75">{s.isoClause}</div></button>)}</div></aside>
       <section className="rounded-lg border bg-card"><div className="flex items-center justify-between border-b p-4"><div><h2 className="font-semibold">{section?.title}</h2><p className="text-xs text-muted-foreground">Compliance badge: {section?.isoClause}</p></div><button onClick={saveSection} className="inline-flex items-center gap-1 rounded-md bg-primary px-3 py-2 text-sm text-white"><Save className="h-4 w-4" /> Save</button></div><textarea value={draft} onChange={(e) => setDraft(e.target.value)} className="h-[520px] w-full resize-none p-4 font-mono text-sm outline-none" /></section></div>
+    <section className="rounded-lg border bg-card p-4"><div className="flex items-center justify-between"><div><h2 className="font-semibold">Section comments</h2><p className="text-xs text-muted-foreground">Open review notes for {section?.title}</p></div><StatusBadge status={`${currentComments.filter((comment) => comment.status === 'open').length} open`} /></div><div className="mt-3 flex gap-2"><input value={commentBody} onChange={(e) => setCommentBody(e.target.value)} placeholder="Add review note / comment" className="flex-1 rounded-md border px-3 py-2 text-sm" /><button onClick={addComment} className="rounded-md bg-primary px-3 py-2 text-sm text-white">Add comment</button></div><div className="mt-4 space-y-2">{currentComments.length === 0 ? <p className="text-sm text-muted-foreground">No comments for this section.</p> : currentComments.map((comment) => <div key={comment.id} className="rounded-md border p-3 text-sm"><div className="flex items-center justify-between gap-3"><p>{comment.body}</p><StatusBadge status={comment.status} /></div>{comment.status === 'open' && <button onClick={() => resolveComment(comment.id)} className="mt-2 text-xs text-primary hover:underline">Mark resolved</button>}</div>)}</div></section>
     <div className="flex flex-wrap gap-2"><DownloadLink href={`/api/v1/plans/${plan.id}/export/markdown`} label="Markdown" /><DownloadLink href={`/api/v1/plans/${plan.id}/export/pdf`} label="PDF" /><DownloadLink href={`/api/v1/plans/${plan.id}/export/docx`} label="DOCX" /><DownloadLink href={`/api/v1/plans/${plan.id}/audit.csv`} label="Audit CSV" /></div>
   </div>;
 }
