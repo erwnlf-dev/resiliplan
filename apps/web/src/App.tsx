@@ -21,6 +21,8 @@ type ServiceAsset = { id: string; serviceName: string; assetName: string; assetT
 type ServiceRisk = { id: string; serviceName: string; riskTitle: string; category: string; probability: number; impact: number; riskScore: number; mitigation: string; owner: string; status: string };
 type RecoveryDrill = { id: string; serviceName: string; drillTitle: string; scheduledAt: string; scope: string; owner: string; status: string; resultSummary: string };
 type ResilienceSummary = { totalAssets: number; criticalAssets: number; priorityRecoveryAssets: number; openRisks: number; highRisks: number; plannedDrills: number; completedDrills: number };
+type BiaEntry = { id: string; serviceName: string; processName: string; owner: string; impact1h: number; impact4h: number; impact24h: number; financialImpact: number; reputationalImpact: number; regulatoryImpact: number; maxImpactScore: number; criticalityTier: string; currentRtoMinutes: number; currentRpoMinutes: number; dependencyNotes: string; workaround: string };
+type BiaSummary = { totalBia: number; tier1: number; tier2: number; fastestRtoMinutes: number | null; fastestRpoMinutes: number | null };
 
 const API = import.meta.env.VITE_API_URL ?? `${window.location.protocol}//${window.location.hostname}:3001`;
 
@@ -96,6 +98,7 @@ function Shell({ user, onUserUpdate, onLogout }: { user: User; onUserUpdate: (us
         <aside className="w-56 shrink-0"><nav className="space-y-1 text-sm">
           <NavLink to="/" icon={<Home className="h-4 w-4" />}>Dashboard</NavLink>
           <NavLink to="/plans" icon={<FileText className="h-4 w-4" />}>DR Plans</NavLink>
+          <NavLink to="/bia" icon={<CheckCircle2 className="h-4 w-4" />}>BIA</NavLink>
           <NavLink to="/assets" icon={<Server className="h-4 w-4" />}>Assets</NavLink>
           <NavLink to="/risks" icon={<AlertTriangle className="h-4 w-4" />}>Risks</NavLink>
           <NavLink to="/drills" icon={<Calendar className="h-4 w-4" />}>Drills</NavLink>
@@ -105,6 +108,7 @@ function Shell({ user, onUserUpdate, onLogout }: { user: User; onUserUpdate: (us
           <Route path="/" element={<Dashboard />} />
           <Route path="/plans" element={<PlansPage />} />
           <Route path="/plans/:id" element={<PlanEditor />} />
+          <Route path="/bia" element={<BiaPage />} />
           <Route path="/assets" element={<AssetsPage />} />
           <Route path="/risks" element={<RisksPage />} />
           <Route path="/drills" element={<DrillsPage />} />
@@ -270,6 +274,29 @@ function SecurityPage({ user, onUserUpdate }: { user: User; onUserUpdate: (user:
   </div>;
 }
 
+function BiaPage() {
+  const [entries, setEntries] = useState<BiaEntry[]>([]);
+  const [summary, setSummary] = useState<BiaSummary | null>(null);
+  const [error, setError] = useState('');
+  async function load() {
+    try {
+      const data = await api<{ entries: BiaEntry[]; summary: BiaSummary }>('/api/v1/bia');
+      setEntries(data.entries); setSummary(data.summary);
+    } catch (err) { setError(err instanceof Error ? err.message : 'Failed to load BIA'); }
+  }
+  useEffect(() => { void load(); }, []);
+  async function submit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault(); setError('');
+    const form = event.currentTarget;
+    const data = new FormData(form);
+    try {
+      await api<BiaEntry>('/api/v1/bia', { method: 'POST', body: JSON.stringify({ serviceName: data.get('serviceName'), processName: data.get('processName'), owner: data.get('owner'), impact1h: Number(data.get('impact1h')), impact4h: Number(data.get('impact4h')), impact24h: Number(data.get('impact24h')), financialImpact: Number(data.get('financialImpact')), reputationalImpact: Number(data.get('reputationalImpact')), regulatoryImpact: Number(data.get('regulatoryImpact')), currentRtoMinutes: Number(data.get('currentRtoMinutes')), currentRpoMinutes: Number(data.get('currentRpoMinutes')), dependencyNotes: data.get('dependencyNotes'), workaround: data.get('workaround') }) });
+      form.reset(); await load();
+    } catch (err) { setError(err instanceof Error ? err.message : 'Create BIA failed'); }
+  }
+  return <RegisterPage title="BIA" subtitle="Business Impact Analysis: impact window, impact dimensions, RTO/RPO, and tier." error={error}><div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5"><KpiCard label="Total BIA" value={`${summary?.totalBia ?? 0}`} hint="Processes" /><KpiCard label="Tier 1" value={`${summary?.tier1 ?? 0}`} hint="Most critical" /><KpiCard label="Tier 2" value={`${summary?.tier2 ?? 0}`} hint="High impact" /><KpiCard label="Fastest RTO" value={summary?.fastestRtoMinutes ? `${summary.fastestRtoMinutes}m` : '-'} hint="Lowest target" /><KpiCard label="Fastest RPO" value={summary?.fastestRpoMinutes ? `${summary.fastestRpoMinutes}m` : '-'} hint="Lowest target" /></div><form onSubmit={submit} className="grid gap-3 rounded-lg border bg-card p-4 md:grid-cols-4"><Input name="serviceName" label="Service" required /><Input name="processName" label="Business process" required /><Input name="owner" label="Owner" required /><Input name="currentRtoMinutes" label="RTO minutes" type="number" defaultValue="240" required /><Input name="currentRpoMinutes" label="RPO minutes" type="number" defaultValue="60" required /><Input name="impact1h" label="Impact 1h (1-5)" type="number" min="1" max="5" defaultValue="3" required /><Input name="impact4h" label="Impact 4h (1-5)" type="number" min="1" max="5" defaultValue="4" required /><Input name="impact24h" label="Impact 24h (1-5)" type="number" min="1" max="5" defaultValue="4" required /><Input name="financialImpact" label="Financial (1-5)" type="number" min="1" max="5" defaultValue="3" required /><Input name="reputationalImpact" label="Reputation (1-5)" type="number" min="1" max="5" defaultValue="3" required /><Input name="regulatoryImpact" label="Regulatory (1-5)" type="number" min="1" max="5" defaultValue="3" required /><label className="text-sm font-medium">Dependency notes<textarea name="dependencyNotes" className="mt-1 h-20 w-full rounded-md border px-3 py-2" /></label><label className="text-sm font-medium md:col-span-4">Workaround<textarea name="workaround" className="mt-1 h-20 w-full rounded-md border px-3 py-2" /></label><div className="md:col-span-4"><button className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-white">Add BIA entry</button></div></form><SimpleTable headers={['Service','Process','Tier','Max','RTO','RPO','Owner']} rows={entries.map((entry) => [entry.serviceName, entry.processName, entry.criticalityTier.replace('_', ' '), String(entry.maxImpactScore), `${entry.currentRtoMinutes}m`, `${entry.currentRpoMinutes}m`, entry.owner])} empty="No BIA entries registered." /></RegisterPage>;
+}
+
 function AssetsPage() {
   const [assets, setAssets] = useState<ServiceAsset[]>([]);
   const [error, setError] = useState('');
@@ -277,10 +304,11 @@ function AssetsPage() {
   useEffect(() => { void load(); }, []);
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault(); setError('');
-    const data = new FormData(event.currentTarget);
+    const form = event.currentTarget;
+    const data = new FormData(form);
     try {
       await api<ServiceAsset>('/api/v1/assets', { method: 'POST', body: JSON.stringify({ serviceName: data.get('serviceName'), assetName: data.get('assetName'), assetType: data.get('assetType'), owner: data.get('owner'), criticality: data.get('criticality'), recoveryPriority: Number(data.get('recoveryPriority')), dependencies: String(data.get('dependencies') ?? '').split(',').map((item) => item.trim()).filter(Boolean), notes: data.get('notes') }) });
-      event.currentTarget.reset(); await load();
+      form.reset(); await load();
     } catch (err) { setError(err instanceof Error ? err.message : 'Create asset failed'); }
   }
   return <RegisterPage title="Assets" subtitle="Service dependency and recovery-priority register." error={error}><form onSubmit={submit} className="grid gap-3 rounded-lg border bg-card p-4 md:grid-cols-3"><Input name="serviceName" label="Service" required /><Input name="assetName" label="Asset name" required /><Input name="assetType" label="Asset type" placeholder="database / vm / network" required /><Input name="owner" label="Owner" required /><Input name="recoveryPriority" label="Recovery priority" type="number" min="1" max="5" defaultValue="3" required /><label className="text-sm font-medium">Criticality<select name="criticality" defaultValue="high" className="mt-1 w-full rounded-md border px-3 py-2"><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option><option value="critical">Critical</option></select></label><Input name="dependencies" label="Dependencies" placeholder="comma separated" /><label className="text-sm font-medium md:col-span-2">Notes<textarea name="notes" className="mt-1 h-20 w-full rounded-md border px-3 py-2" /></label><div className="md:col-span-3"><button className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-white">Add asset</button></div></form><SimpleTable headers={['Service','Asset','Type','Owner','Priority','Criticality']} rows={assets.map((asset) => [asset.serviceName, asset.assetName, asset.assetType, asset.owner, String(asset.recoveryPriority), asset.criticality])} empty="No assets registered." /></RegisterPage>;
@@ -293,10 +321,11 @@ function RisksPage() {
   useEffect(() => { void load(); }, []);
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault(); setError('');
-    const data = new FormData(event.currentTarget);
+    const form = event.currentTarget;
+    const data = new FormData(form);
     try {
       await api<ServiceRisk>('/api/v1/risks', { method: 'POST', body: JSON.stringify({ serviceName: data.get('serviceName'), riskTitle: data.get('riskTitle'), category: data.get('category'), probability: Number(data.get('probability')), impact: Number(data.get('impact')), owner: data.get('owner'), mitigation: data.get('mitigation') }) });
-      event.currentTarget.reset(); await load();
+      form.reset(); await load();
     } catch (err) { setError(err instanceof Error ? err.message : 'Create risk failed'); }
   }
   return <RegisterPage title="Risks" subtitle="Probability × impact risk register tied to DR readiness." error={error}><form onSubmit={submit} className="grid gap-3 rounded-lg border bg-card p-4 md:grid-cols-3"><Input name="serviceName" label="Service" required /><Input name="riskTitle" label="Risk title" required /><Input name="category" label="Category" required /><Input name="probability" label="Probability 1-5" type="number" min="1" max="5" defaultValue="3" required /><Input name="impact" label="Impact 1-5" type="number" min="1" max="5" defaultValue="4" required /><Input name="owner" label="Owner" /><label className="text-sm font-medium md:col-span-3">Mitigation<textarea name="mitigation" className="mt-1 h-20 w-full rounded-md border px-3 py-2" /></label><div className="md:col-span-3"><button className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-white">Add risk</button></div></form><SimpleTable headers={['Service','Risk','Category','Score','Owner','Status']} rows={risks.map((risk) => [risk.serviceName, risk.riskTitle, risk.category, String(risk.riskScore), risk.owner || '-', risk.status])} empty="No risks registered." /></RegisterPage>;
@@ -309,10 +338,11 @@ function DrillsPage() {
   useEffect(() => { void load(); }, []);
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault(); setError('');
-    const data = new FormData(event.currentTarget);
+    const form = event.currentTarget;
+    const data = new FormData(form);
     try {
       await api<RecoveryDrill>('/api/v1/drills', { method: 'POST', body: JSON.stringify({ serviceName: data.get('serviceName'), drillTitle: data.get('drillTitle'), scheduledAt: new Date(String(data.get('scheduledAt'))).toISOString(), scope: data.get('scope'), owner: data.get('owner') }) });
-      event.currentTarget.reset(); await load();
+      form.reset(); await load();
     } catch (err) { setError(err instanceof Error ? err.message : 'Create drill failed'); }
   }
   return <RegisterPage title="Drills" subtitle="Recovery exercise calendar and result tracking." error={error}><form onSubmit={submit} className="grid gap-3 rounded-lg border bg-card p-4 md:grid-cols-2"><Input name="serviceName" label="Service" required /><Input name="drillTitle" label="Drill title" required /><Input name="scheduledAt" label="Schedule" type="datetime-local" required /><Input name="owner" label="Owner" required /><label className="text-sm font-medium md:col-span-2">Scope<textarea name="scope" className="mt-1 h-20 w-full rounded-md border px-3 py-2" required /></label><div className="md:col-span-2"><button className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-white">Schedule drill</button></div></form><SimpleTable headers={['Service','Drill','Schedule','Owner','Status']} rows={drills.map((drill) => [drill.serviceName, drill.drillTitle, new Date(drill.scheduledAt).toLocaleString(), drill.owner, drill.status])} empty="No drills scheduled." /></RegisterPage>;

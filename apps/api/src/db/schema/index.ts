@@ -10,3 +10,4 @@ export * from './tenants.js';
 export * from './users.js';
 export * from './drp.js';
 export * from './resilience.js';
+export * from './bia.js';
