@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, Route, Routes, useNavigate, useParams } from 'react-router-dom';
-import { AlertTriangle, Calendar, CheckCircle2, Download, FileText, Home, Lock, LogOut, Save, Send, Server, Sparkles, Users } from 'lucide-react';
+import { Activity, AlertTriangle, Bell, Calendar, CheckCircle2, Download, FileText, Home, Lock, LogOut, Save, Send, Server, Sparkles, Users } from 'lucide-react';
 import * as Y from 'yjs';
 import { WebsocketProvider } from 'y-websocket';
 
@@ -28,6 +28,8 @@ type BiaSummary = { totalBia: number; tier1: number; tier2: number; fastestRtoMi
 type PlanComment = { id: string; sectionKey: string; body: string; status: 'open' | 'resolved'; parentCommentId?: string | null; mentionedEmails?: string[]; createdAt: string };
 type PlanVersion = { id: string; version: number; changeSummary: string; createdAt: string };
 type ManagedUser = { id: string; email: string; name: string; role: User['role']; disabled: boolean; mfaEnabled: boolean; createdAt: string };
+type NotificationItem = { id: string; title: string; body: string; type: string; status: 'unread' | 'read'; createdAt: string };
+type MonitoringSummary = { status: string; timestamp: string; counters: { plans: number; users: number; risks: number; drills: number; notifications: number }; system: { uptimeSeconds: number; memoryUsageMB: number } };
 
 const API = import.meta.env.VITE_API_URL ?? `${window.location.protocol}//${window.location.hostname}:3001`;
 const COLLAB_WS = import.meta.env.VITE_COLLAB_WS_URL ?? `ws://${window.location.hostname}:3002`;
@@ -109,6 +111,8 @@ function Shell({ user, onUserUpdate, onLogout }: { user: User; onUserUpdate: (us
           <NavLink to="/risks" icon={<AlertTriangle className="h-4 w-4" />}>Risks</NavLink>
           <NavLink to="/drills" icon={<Calendar className="h-4 w-4" />}>Drills</NavLink>
           <NavLink to="/users" icon={<Users className="h-4 w-4" />}>Users</NavLink>
+          <NavLink to="/notifications" icon={<Bell className="h-4 w-4" />}>Notifications</NavLink>
+          <NavLink to="/monitoring" icon={<Activity className="h-4 w-4" />}>Monitoring</NavLink>
           <NavLink to="/security" icon={<Lock className="h-4 w-4" />}>Security</NavLink>
         </nav></aside>
         <main className="flex-1"><Routes>
@@ -120,6 +124,8 @@ function Shell({ user, onUserUpdate, onLogout }: { user: User; onUserUpdate: (us
           <Route path="/risks" element={<RisksPage />} />
           <Route path="/drills" element={<DrillsPage />} />
           <Route path="/users" element={<UsersPage />} />
+          <Route path="/notifications" element={<NotificationsPage />} />
+          <Route path="/monitoring" element={<MonitoringPage />} />
           <Route path="/security" element={<SecurityPage user={user} onUserUpdate={onUserUpdate} />} />
           <Route path="*" element={<NotFound />} />
         </Routes></main>
@@ -464,6 +470,23 @@ function DrillsPage() {
     await load();
   }
   return <RegisterPage title="Drills" subtitle="Recovery exercise calendar and result tracking." error={error}><form onSubmit={submit} className="grid gap-3 rounded-lg border bg-card p-4 md:grid-cols-2"><Input name="serviceName" label="Service" required /><Input name="drillTitle" label="Drill title" required /><Input name="scheduledAt" label="Schedule" type="datetime-local" required /><Input name="owner" label="Owner" required /><label className="text-sm font-medium md:col-span-2">Scope<textarea name="scope" className="mt-1 h-20 w-full rounded-md border px-3 py-2" required /></label><div className="md:col-span-2"><button className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-white">Schedule drill</button></div></form><div className="rounded-lg border bg-card"><div className="border-b p-4 font-medium">Drill results</div>{drills.length === 0 ? <div className="p-6 text-center text-sm text-muted-foreground">No drills scheduled.</div> : <div className="divide-y">{drills.map((drill) => <div key={drill.id} className="flex items-center justify-between gap-3 p-4 text-sm"><div><div className="font-medium">{drill.drillTitle}</div><div className="text-muted-foreground">{drill.serviceName} · {new Date(drill.scheduledAt).toLocaleString()} · {drill.owner}</div>{drill.resultSummary && <p className="mt-1 text-xs text-muted-foreground">Result: {drill.resultSummary}</p>}</div><div className="flex items-center gap-2"><StatusBadge status={drill.status} />{drill.status !== 'completed' && <button onClick={() => completeDrill(drill)} className="rounded-md border px-3 py-2 text-xs">Mark completed</button>}</div></div>)}</div>}</div></RegisterPage>;
+}
+
+function NotificationsPage() {
+  const [items, setItems] = useState<NotificationItem[]>([]);
+  const [unread, setUnread] = useState(0);
+  const [error, setError] = useState('');
+  async function load() { try { const data = await api<{ notifications: NotificationItem[]; unread: number }>('/api/v1/notifications'); setItems(data.notifications); setUnread(data.unread); } catch (err) { setError(err instanceof Error ? err.message : 'Failed to load notifications'); } }
+  useEffect(() => { void load(); }, []);
+  async function markRead(id: string) { await api<NotificationItem>(`/api/v1/notifications/${id}`, { method: 'PATCH', body: JSON.stringify({ status: 'read' }) }); await load(); }
+  return <RegisterPage title="Notifications" subtitle={`${unread} unread operational notifications.`} error={error}>{items.length === 0 ? <div className="rounded-lg border bg-card p-6 text-sm text-muted-foreground">No notifications.</div> : <div className="space-y-2">{items.map((item) => <div key={item.id} className="rounded-lg border bg-card p-4 text-sm"><div className="flex items-center justify-between gap-3"><div><div className="font-medium">{item.title}</div><div className="text-muted-foreground">{item.type} · {new Date(item.createdAt).toLocaleString()}</div><p className="mt-2">{item.body}</p></div><div className="flex items-center gap-2"><StatusBadge status={item.status} />{item.status === 'unread' && <button onClick={() => markRead(item.id)} className="rounded-md border px-3 py-2 text-xs">Mark read</button>}</div></div></div>)}</div>}</RegisterPage>;
+}
+
+function MonitoringPage() {
+  const [summary, setSummary] = useState<MonitoringSummary | null>(null);
+  const [error, setError] = useState('');
+  useEffect(() => { api<MonitoringSummary>('/api/v1/monitoring/summary').then(setSummary).catch((err) => setError(err instanceof Error ? err.message : 'Failed to load monitoring')); }, []);
+  return <RegisterPage title="Monitoring" subtitle="Operational counters and runtime health." error={error}>{!summary ? <Centered>Loading monitoring...</Centered> : <><div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5"><KpiCard label="Plans" value={`${summary.counters.plans}`} hint="DRP total" /><KpiCard label="Users" value={`${summary.counters.users}`} hint="Tenant users" /><KpiCard label="Risks" value={`${summary.counters.risks}`} hint="Risk records" /><KpiCard label="Drills" value={`${summary.counters.drills}`} hint="Exercise records" /><KpiCard label="Notifications" value={`${summary.counters.notifications}`} hint="Unread" /></div><div className="rounded-lg border bg-card p-4 text-sm"><h2 className="font-semibold">Runtime</h2><p className="mt-2 text-muted-foreground">Status: {summary.status} · Uptime: {summary.system.uptimeSeconds}s · Memory: {summary.system.memoryUsageMB} MB · Updated: {new Date(summary.timestamp).toLocaleString()}</p></div></>}</RegisterPage>;
 }
 
 function UsersPage() {

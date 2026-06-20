@@ -6,8 +6,11 @@
  */
 
 import type { FastifyInstance } from 'fastify';
+import { count, eq } from 'drizzle-orm';
 import { config } from '../config/index.js';
-import { pool } from '../db/client.js';
+import { db, pool } from '../db/client.js';
+import { drpPlans, notifications, recoveryDrills, serviceRisks, users } from '../db/schema/index.js';
+import { requireAuth } from '../auth/auth-service.js';
 
 export async function healthRoutes(app: FastifyInstance) {
   // Liveness — is the process alive?
@@ -89,5 +92,29 @@ export async function healthRoutes(app: FastifyInstance) {
       system: systemInfo,
       checks,
     });
+  });
+
+  app.get('/api/v1/monitoring/summary', async (req) => {
+    const user = await requireAuth(req);
+    const [plansTotal] = await db.select({ value: count() }).from(drpPlans).where(eq(drpPlans.tenantId, user.tenantId));
+    const [usersTotal] = await db.select({ value: count() }).from(users).where(eq(users.tenantId, user.tenantId));
+    const [risksTotal] = await db.select({ value: count() }).from(serviceRisks).where(eq(serviceRisks.tenantId, user.tenantId));
+    const [drillsTotal] = await db.select({ value: count() }).from(recoveryDrills).where(eq(recoveryDrills.tenantId, user.tenantId));
+    const [unreadNotifications] = await db.select({ value: count() }).from(notifications).where(eq(notifications.userId, user.id));
+    return {
+      status: 'ok',
+      timestamp: new Date().toISOString(),
+      counters: {
+        plans: plansTotal.value,
+        users: usersTotal.value,
+        risks: risksTotal.value,
+        drills: drillsTotal.value,
+        notifications: unreadNotifications.value,
+      },
+      system: {
+        uptimeSeconds: Math.floor(process.uptime()),
+        memoryUsageMB: Math.round(process.memoryUsage().heapUsed / 1024 / 1024),
+      },
+    };
   });
 }

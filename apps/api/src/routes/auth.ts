@@ -1,4 +1,5 @@
-import { eq } from 'drizzle-orm';
+import { randomBytes } from 'node:crypto';
+import { and, eq, gt } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { db } from '../db/client.js';
@@ -8,9 +9,11 @@ import {
   createTotpSecret,
   deleteSession,
   getAuthUser,
+  hashPassword,
   readCookie,
   requireAuth,
   sessionCookieName,
+  validatePasswordPolicy,
   verifyPassword,
   verifyTotp,
 } from '../auth/auth-service.js';
@@ -84,7 +87,6 @@ export async function authRoutes(app: FastifyInstance) {
       err.statusCode = 400;
       throw err;
     }
-    const { hashPassword, validatePasswordPolicy } = await import('../auth/auth-service.js');
     const issues = validatePasswordPolicy(body.newPassword);
     if (issues.length) {
       const err = new Error(issues.join(' ')) as Error & { statusCode: number };
@@ -92,6 +94,34 @@ export async function authRoutes(app: FastifyInstance) {
       throw err;
     }
     await db.update(users).set({ passwordHash: await hashPassword(body.newPassword), updatedAt: new Date() }).where(eq(users.id, user.id));
+    return { ok: true };
+  });
+
+  app.post('/api/v1/auth/password-reset/request', async (req) => {
+    const body = z.object({ email: z.string().email() }).parse(req.body);
+    const [record] = await db.select().from(users).where(eq(users.email, body.email.toLowerCase())).limit(1);
+    if (!record || record.disabled) return { ok: true };
+    const resetToken = randomBytes(32).toString('base64url');
+    const resetTokenExpiresAt = new Date(Date.now() + 1000 * 60 * 30);
+    await db.update(users).set({ resetToken, resetTokenExpiresAt, updatedAt: new Date() }).where(eq(users.id, record.id));
+    return { ok: true, ...(process.env.NODE_ENV === 'production' ? {} : { resetToken }) };
+  });
+
+  app.post('/api/v1/auth/password-reset/confirm', async (req) => {
+    const body = z.object({ token: z.string().min(20), newPassword: z.string().min(12) }).parse(req.body);
+    const issues = validatePasswordPolicy(body.newPassword);
+    if (issues.length) {
+      const err = new Error(issues.join(' ')) as Error & { statusCode: number };
+      err.statusCode = 400;
+      throw err;
+    }
+    const [record] = await db.select().from(users).where(and(eq(users.resetToken, body.token), gt(users.resetTokenExpiresAt, new Date()))).limit(1);
+    if (!record) {
+      const err = new Error('Reset token is invalid or expired') as Error & { statusCode: number };
+      err.statusCode = 400;
+      throw err;
+    }
+    await db.update(users).set({ passwordHash: await hashPassword(body.newPassword), resetToken: null, resetTokenExpiresAt: null, mustResetPassword: false, updatedAt: new Date() }).where(eq(users.id, record.id));
     return { ok: true };
   });
 }
