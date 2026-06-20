@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, Route, Routes, useNavigate, useParams } from 'react-router-dom';
-import { Activity, AlertTriangle, Bell, Calendar, CheckCircle2, Download, FileText, Home, Lock, LogOut, Save, Send, Server, Sparkles, Users } from 'lucide-react';
+import { Activity, AlertTriangle, Bell, Calendar, CheckCircle2, CreditCard, Download, FileText, Home, Lock, LogOut, Save, Send, Server, Sparkles, Users } from 'lucide-react';
 import * as Y from 'yjs';
 import { WebsocketProvider } from 'y-websocket';
 
@@ -30,6 +30,7 @@ type PlanVersion = { id: string; version: number; changeSummary: string; created
 type ManagedUser = { id: string; email: string; name: string; role: User['role']; disabled: boolean; mfaEnabled: boolean; createdAt: string };
 type NotificationItem = { id: string; title: string; body: string; type: string; status: 'unread' | 'read'; createdAt: string };
 type MonitoringSummary = { status: string; timestamp: string; counters: { plans: number; users: number; risks: number; drills: number; notifications: number }; system: { uptimeSeconds: number; memoryUsageMB: number } };
+type BillingSummary = { subscription: { planCode: string; status: string; seatsLimit: number; plansLimit: number; aiRequestsLimit: number; currentPeriodEnd: string }; usage: Record<string, number> };
 
 const API = import.meta.env.VITE_API_URL ?? `${window.location.protocol}//${window.location.hostname}:3001`;
 const COLLAB_WS = import.meta.env.VITE_COLLAB_WS_URL ?? `ws://${window.location.hostname}:3002`;
@@ -113,6 +114,7 @@ function Shell({ user, onUserUpdate, onLogout }: { user: User; onUserUpdate: (us
           <NavLink to="/users" icon={<Users className="h-4 w-4" />}>Users</NavLink>
           <NavLink to="/notifications" icon={<Bell className="h-4 w-4" />}>Notifications</NavLink>
           <NavLink to="/monitoring" icon={<Activity className="h-4 w-4" />}>Monitoring</NavLink>
+          <NavLink to="/billing" icon={<CreditCard className="h-4 w-4" />}>Billing</NavLink>
           <NavLink to="/security" icon={<Lock className="h-4 w-4" />}>Security</NavLink>
         </nav></aside>
         <main className="flex-1"><Routes>
@@ -126,6 +128,7 @@ function Shell({ user, onUserUpdate, onLogout }: { user: User; onUserUpdate: (us
           <Route path="/users" element={<UsersPage />} />
           <Route path="/notifications" element={<NotificationsPage />} />
           <Route path="/monitoring" element={<MonitoringPage />} />
+          <Route path="/billing" element={<BillingPage />} />
           <Route path="/security" element={<SecurityPage user={user} onUserUpdate={onUserUpdate} />} />
           <Route path="*" element={<NotFound />} />
         </Routes></main>
@@ -487,6 +490,13 @@ function MonitoringPage() {
   const [error, setError] = useState('');
   useEffect(() => { api<MonitoringSummary>('/api/v1/monitoring/summary').then(setSummary).catch((err) => setError(err instanceof Error ? err.message : 'Failed to load monitoring')); }, []);
   return <RegisterPage title="Monitoring" subtitle="Operational counters and runtime health." error={error}>{!summary ? <Centered>Loading monitoring...</Centered> : <><div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5"><KpiCard label="Plans" value={`${summary.counters.plans}`} hint="DRP total" /><KpiCard label="Users" value={`${summary.counters.users}`} hint="Tenant users" /><KpiCard label="Risks" value={`${summary.counters.risks}`} hint="Risk records" /><KpiCard label="Drills" value={`${summary.counters.drills}`} hint="Exercise records" /><KpiCard label="Notifications" value={`${summary.counters.notifications}`} hint="Unread" /></div><div className="rounded-lg border bg-card p-4 text-sm"><h2 className="font-semibold">Runtime</h2><p className="mt-2 text-muted-foreground">Status: {summary.status} · Uptime: {summary.system.uptimeSeconds}s · Memory: {summary.system.memoryUsageMB} MB · Updated: {new Date(summary.timestamp).toLocaleString()}</p></div></>}</RegisterPage>;
+}
+
+function BillingPage() {
+  const [summary, setSummary] = useState<BillingSummary | null>(null);
+  const [error, setError] = useState('');
+  useEffect(() => { api<BillingSummary>('/api/v1/billing/summary').then(setSummary).catch((err) => setError(err instanceof Error ? err.message : 'Failed to load billing')); }, []);
+  return <RegisterPage title="Billing" subtitle="Subscription limits and usage metering foundation." error={error}>{!summary ? <Centered>Loading billing...</Centered> : <><div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4"><KpiCard label="Plan" value={summary.subscription.planCode} hint={summary.subscription.status} /><KpiCard label="Seats limit" value={`${summary.subscription.seatsLimit}`} hint="User seats" /><KpiCard label="Plans limit" value={`${summary.subscription.plansLimit}`} hint="DRP limit" /><KpiCard label="AI limit" value={`${summary.subscription.aiRequestsLimit}`} hint="Requests / period" /></div><div className="rounded-lg border bg-card p-4"><h2 className="font-semibold">Usage events</h2><div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">{['plan_created','ai_request','export_generated','collaboration_session'].map((key) => <div key={key} className="rounded-md border p-3 text-sm"><div className="text-muted-foreground">{key}</div><div className="text-2xl font-bold">{summary.usage[key] ?? 0}</div></div>)}</div><p className="mt-3 text-xs text-muted-foreground">Current period ends {new Date(summary.subscription.currentPeriodEnd).toLocaleString()}</p></div></>}</RegisterPage>;
 }
 
 function UsersPage() {

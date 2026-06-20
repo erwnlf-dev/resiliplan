@@ -18,6 +18,7 @@ import { resilienceRoutes } from './routes/resilience.js';
 import { biaRoutes } from './routes/bia.js';
 import { aiRoutes } from './routes/ai.js';
 import { userRoutes } from './routes/users.js';
+import { billingRoutes } from './routes/billing.js';
 import { CSRF_COOKIE, CSRF_HEADER, createCsrfToken, csrfCookieHeader, readCookieValue, shouldCheckCsrf, verifyCsrfToken } from './auth/csrf-service.js';
 
 export async function buildServer(): Promise<FastifyInstance> {
@@ -147,6 +148,7 @@ export async function buildServer(): Promise<FastifyInstance> {
   await app.register(biaRoutes);
   await app.register(aiRoutes);
   await app.register(userRoutes);
+  await app.register(billingRoutes);
 
   // ===== Root route =====
   app.get('/', async () => {
