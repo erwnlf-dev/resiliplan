@@ -11,6 +11,9 @@ import sensible from '@fastify/sensible';
 import { config } from './config/index.js';
 import { logger } from './utils/logger.js';
 import { healthRoutes } from './routes/health.js';
+import { authRoutes } from './routes/auth.js';
+import { planRoutes } from './routes/plans.js';
+import { metricsRoutes } from './routes/metrics.js';
 
 export async function buildServer(): Promise<FastifyInstance> {
   const app = Fastify({
@@ -70,7 +73,10 @@ export async function buildServer(): Promise<FastifyInstance> {
         cb(null, true);
         return;
       }
-      if (config.CORS_ORIGINS.includes(origin)) {
+      const isLoopbackDevOrigin =
+        config.NODE_ENV !== 'production' &&
+        (origin.startsWith('http://localhost:') || origin.startsWith('http://127.0.0.1:'));
+      if (config.CORS_ORIGINS.includes(origin) || isLoopbackDevOrigin) {
         cb(null, true);
         return;
       }
@@ -105,6 +111,11 @@ export async function buildServer(): Promise<FastifyInstance> {
 
   // ===== Health Check (no auth, no rate limit) =====
   await app.register(healthRoutes);
+  await app.register(metricsRoutes);
+
+  // ===== Phase 1 API =====
+  await app.register(authRoutes);
+  await app.register(planRoutes);
 
   // ===== Root route =====
   app.get('/', async () => {

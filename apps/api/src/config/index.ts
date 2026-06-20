@@ -34,7 +34,7 @@ const ConfigSchema = z.object({
     .default('change-me-please-32-chars-minimum-please-change-in-production'),
   CORS_ORIGINS: z
     .string()
-    .default('http://localhost:5173,http://localhost:4173')
+    .default('http://localhost:5173,http://localhost:4173,http://127.0.0.1:5173,http://127.0.0.1:4173')
     .transform((s) => s.split(',').map((o) => o.trim())),
 
   // Rate limiting
