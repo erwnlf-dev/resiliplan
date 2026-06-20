@@ -10,6 +10,22 @@ export const tenants = pgTable('tenants', {
       isoStandards?: string[];
       approvalRequired?: boolean;
       ssoEnabled?: boolean;
+      smtp?: {
+        mode?: 'outbox_only' | 'smtp';
+        host?: string;
+        port?: number;
+        from?: string;
+        configuredFromDashboard?: boolean;
+      };
+      internalAccess?: {
+        mode?: 'ip_port';
+        securityGroupRestricted?: boolean;
+        adminPolicy?: string;
+      };
+      backup?: {
+        frequency?: 'daily';
+        retentionDays?: number;
+      };
     }>()
     .default({})
     .notNull(),

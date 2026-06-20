@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, Route, Routes, useNavigate, useParams } from 'react-router-dom';
-import { Activity, AlertTriangle, Bell, Calendar, CheckCircle2, CreditCard, Download, FileText, Home, Lock, LogOut, Mail, Save, Send, Server, Sparkles, Users } from 'lucide-react';
+import { Activity, AlertTriangle, Bell, Calendar, CheckCircle2, CreditCard, Download, FileText, Home, Lock, LogOut, Mail, Save, Send, Server, Settings, Sparkles, Users } from 'lucide-react';
 import * as Y from 'yjs';
 import { WebsocketProvider } from 'y-websocket';
 
@@ -33,6 +33,7 @@ type MonitoringSummary = { status: string; timestamp: string; counters: { plans:
 type BillingSummary = { subscription: { planCode: string; status: string; seatsLimit: number; plansLimit: number; aiRequestsLimit: number; currentPeriodEnd: string }; usage: Record<string, number> };
 type EmailOutboxItem = { id: string; toEmail: string; subject: string; bodyText: string; emailType: string; status: 'queued' | 'sent' | 'failed' | 'cancelled'; lastError?: string | null; queuedAt: string };
 type ReadinessSummary = { status: string; failed: number; warnings: number; checks: Array<{ key: string; label: string; status: 'pass' | 'warn' | 'fail'; detail: string }> };
+type TenantSettings = { smtp: { mode: 'outbox_only' | 'smtp'; host?: string; port?: number; from?: string; configuredFromDashboard?: boolean }; internalAccess: { mode: 'ip_port'; securityGroupRestricted: boolean; adminPolicy: string }; backup: { frequency: 'daily'; retentionDays: number } };
 
 const API = import.meta.env.VITE_API_URL ?? `${window.location.protocol}//${window.location.hostname}:3001`;
 const COLLAB_WS = import.meta.env.VITE_COLLAB_WS_URL ?? `ws://${window.location.hostname}:3002`;
@@ -119,6 +120,7 @@ function Shell({ user, onUserUpdate, onLogout }: { user: User; onUserUpdate: (us
           <NavLink to="/billing" icon={<CreditCard className="h-4 w-4" />}>Billing</NavLink>
           <NavLink to="/email-outbox" icon={<Mail className="h-4 w-4" />}>Email Outbox</NavLink>
           <NavLink to="/readiness" icon={<CheckCircle2 className="h-4 w-4" />}>Readiness</NavLink>
+          <NavLink to="/settings" icon={<Settings className="h-4 w-4" />}>Settings</NavLink>
           <NavLink to="/security" icon={<Lock className="h-4 w-4" />}>Security</NavLink>
         </nav></aside>
         <main className="flex-1"><Routes>
@@ -135,6 +137,7 @@ function Shell({ user, onUserUpdate, onLogout }: { user: User; onUserUpdate: (us
           <Route path="/billing" element={<BillingPage />} />
           <Route path="/email-outbox" element={<EmailOutboxPage />} />
           <Route path="/readiness" element={<ReadinessPage />} />
+          <Route path="/settings" element={<SettingsPage />} />
           <Route path="/security" element={<SecurityPage user={user} onUserUpdate={onUserUpdate} />} />
           <Route path="*" element={<NotFound />} />
         </Routes></main>
@@ -521,6 +524,29 @@ function ReadinessPage() {
   useEffect(() => { api<ReadinessSummary>('/api/v1/readiness').then(setSummary).catch((err) => setError(err instanceof Error ? err.message : 'Failed to load readiness')); }, []);
   const badgeClass = (status: string) => status === 'pass' ? 'border-green-200 bg-green-50 text-green-700' : status === 'warn' ? 'border-yellow-200 bg-yellow-50 text-yellow-800' : 'border-red-200 bg-red-50 text-red-700';
   return <RegisterPage title="Production Readiness" subtitle="Internal go-live checks for a professional operating posture." error={error}>{!summary ? <Centered>Loading readiness...</Centered> : <><div className="grid gap-4 sm:grid-cols-3"><KpiCard label="Overall" value={summary.status} hint="readiness state" /><KpiCard label="Warnings" value={`${summary.warnings}`} hint="needs decision" /><KpiCard label="Failures" value={`${summary.failed}`} hint="must fix" /></div><div className="space-y-2">{summary.checks.map((check) => <div key={check.key} className={`rounded-lg border p-4 text-sm ${badgeClass(check.status)}`}><div className="flex items-center justify-between"><div className="font-medium">{check.label}</div><span className="uppercase">{check.status}</span></div><p className="mt-2">{check.detail}</p></div>)}</div></>}</RegisterPage>;
+}
+
+function SettingsPage() {
+  const [settings, setSettings] = useState<TenantSettings | null>(null);
+  const [message, setMessage] = useState('');
+  const [error, setError] = useState('');
+  async function load() { try { const data = await api<{ settings: TenantSettings }>('/api/v1/settings'); setSettings(data.settings); } catch (err) { setError(err instanceof Error ? err.message : 'Failed to load settings'); } }
+  useEffect(() => { void load(); }, []);
+  async function save(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault(); setError(''); setMessage('');
+    const form = event.currentTarget; const data = new FormData(form);
+    try {
+      const payload: TenantSettings = {
+        smtp: { mode: data.get('smtpMode') as 'outbox_only' | 'smtp', host: String(data.get('smtpHost') || '') || undefined, port: Number(data.get('smtpPort') || 0) || undefined, from: String(data.get('smtpFrom') || '') || undefined, configuredFromDashboard: true },
+        internalAccess: { mode: 'ip_port', securityGroupRestricted: data.get('securityGroupRestricted') === 'on', adminPolicy: String(data.get('adminPolicy') || 'single_admin_erwin_only') },
+        backup: { frequency: 'daily', retentionDays: Number(data.get('retentionDays') || 14) },
+      };
+      const updated = await api<{ settings: TenantSettings }>('/api/v1/settings', { method: 'PATCH', body: JSON.stringify(payload) });
+      setSettings(updated.settings); setMessage('Settings saved.');
+    } catch (err) { setError(err instanceof Error ? err.message : 'Save settings failed'); }
+  }
+  if (!settings) return <RegisterPage title="Settings" subtitle="Internal production posture." error={error}><Centered>Loading settings...</Centered></RegisterPage>;
+  return <RegisterPage title="Settings" subtitle="Internal office access via IP:port; SMTP can be configured later from this dashboard." error={error}>{message && <div className="rounded-md border border-green-200 bg-green-50 p-3 text-sm text-green-700">{message}</div>}<form onSubmit={save} className="grid gap-4 rounded-lg border bg-card p-4 md:grid-cols-2"><label className="text-sm font-medium">SMTP mode<select name="smtpMode" defaultValue={settings.smtp.mode} className="mt-1 w-full rounded-md border px-3 py-2"><option value="outbox_only">Outbox only for now</option><option value="smtp">SMTP configured</option></select></label><Input name="smtpHost" label="SMTP host" defaultValue={settings.smtp.host ?? ''} /><Input name="smtpPort" label="SMTP port" type="number" defaultValue={settings.smtp.port ? String(settings.smtp.port) : ''} /><Input name="smtpFrom" label="SMTP from" defaultValue={settings.smtp.from ?? ''} /><label className="text-sm font-medium">Access model<input name="accessMode" value="IP and port" disabled className="mt-1 w-full rounded-md border bg-muted px-3 py-2" /></label><label className="flex items-center gap-2 text-sm font-medium"><input name="securityGroupRestricted" type="checkbox" defaultChecked={settings.internalAccess.securityGroupRestricted} /> Restricted by VM security group</label><Input name="adminPolicy" label="Admin policy" defaultValue={settings.internalAccess.adminPolicy} /><Input name="retentionDays" label="Backup retention days" type="number" defaultValue={String(settings.backup.retentionDays)} /><div className="md:col-span-2"><button className="rounded-md bg-primary px-4 py-2 text-sm text-white">Save settings</button></div></form></RegisterPage>;
 }
 
 function UsersPage() {
