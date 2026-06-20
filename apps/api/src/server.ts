@@ -16,6 +16,7 @@ import { planRoutes } from './routes/plans.js';
 import { metricsRoutes } from './routes/metrics.js';
 import { resilienceRoutes } from './routes/resilience.js';
 import { biaRoutes } from './routes/bia.js';
+import { aiRoutes } from './routes/ai.js';
 import { CSRF_COOKIE, CSRF_HEADER, createCsrfToken, csrfCookieHeader, readCookieValue, shouldCheckCsrf, verifyCsrfToken } from './auth/csrf-service.js';
 
 export async function buildServer(): Promise<FastifyInstance> {
@@ -143,6 +144,7 @@ export async function buildServer(): Promise<FastifyInstance> {
   await app.register(planRoutes);
   await app.register(resilienceRoutes);
   await app.register(biaRoutes);
+  await app.register(aiRoutes);
 
   // ===== Root route =====
   app.get('/', async () => {
