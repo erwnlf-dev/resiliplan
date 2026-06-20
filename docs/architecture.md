@@ -1,6 +1,7 @@
-# DRPBuilder — Technical Architecture
+# ResiliPlan — Technical Architecture
 
 > Supporting doc untuk `PRD.md`. Deep dive ke teknologi, data model, dan AI integration.
+> **Note (2026-06-20):** Updated untuk reflect self-hosted internal use, BYO AI, single-tenant.
 
 ## 1. Tech Stack Detail
 
@@ -79,7 +80,7 @@
 ## 2. Folder Structure (Monorepo — Turborepo optional)
 
 ```
-DRPBuilder/
+ResiliPlan/
 ├── apps/
 │   ├── web/                          # Vite + React frontend
 │   │   ├── src/
@@ -416,15 +417,17 @@ volumes:
   miniodata:
 ```
 
-### 7.2 Production (Phase 4+)
+### 7.2 Production (Self-hosted, Single Server)
 
-- **Frontend:** Cloudflare Pages (CDN, edge cache)
-- **Backend:** Fly.io atau Railway (single region Asia-Southeast)
-- **Database:** Neon (serverless Postgres, auto-scaling)
-- **Redis:** Upstash (serverless, pay-per-request)
-- **Storage:** Cloudflare R2 (S3-compatible, no egress fee)
-- **Email:** Resend
-- **Observability:** Sentry + Better Stack (logs)
+- **Host:** Public cloud server kantor (existing infra, single host)
+- **Container orchestration:** Docker Compose (tidak pakai K8s — overkill untuk internal single-server)
+- **Reverse proxy:** Nginx (TLS termination via Let's Encrypt + certbot)
+- **Database:** PostgreSQL 16 (Docker container, persistent volume `/var/lib/postgresql/data`)
+- **Redis:** Redis 7 (Docker container, persistent volume)
+- **Storage:** Local FS `/var/lib/resiliplan/exports/` (PDF, DOCX, attachments, evidence)
+- **Backup:** Daily `pg_dump` cron → NAS kantor (keep 7 daily + 4 weekly + 12 monthly)
+- **Email:** SMTP mail kantor (tidak pakai third-party)
+- **Observability:** Sentry self-hosted (atau free tier untuk early stage)
 
 ### 7.3 CI/CD (GitHub Actions)
 

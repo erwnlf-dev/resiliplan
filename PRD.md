@@ -1,9 +1,9 @@
-# DRPBuilder — Disaster Recovery Plan Builder (SaaS)
+# ResiliPlan — Disaster Recovery Plan Builder
 
-> **Status:** PRD v1.0 — Master Grand Plan
+> **Status:** PRD v1.1 — Master Grand Plan (revised 2026-06-20)
 > **Author:** Erwin Alifiansyah · IT Service Resilience · PT Datacomm Diangraha
-> **Tanggal:** 2026-06-20
-> **Repositori:** `~/ITResilience_Prod/DRPBuilder`
+> **Repositori:** `~/ITResilience_Prod/ResiliPlan`
+> **License:** Proprietary — All rights reserved (internal use + future commercial TBD)
 
 ---
 
@@ -11,13 +11,18 @@
 
 ### 1.1 Visi & Misi
 
-**Visi:** Menjadi platform standar industri di Indonesia untuk membangun, menguji, dan memelihara Disaster Recovery Plan (DRP) yang teruji, terdokumentasi, dan patuh terhadap standar internasional (NIST SP 800-34, ISO 22301, BCI GPG).
+**Visi (revised):** ResiliPlan adalah tool internal PT Datacomm Diangraha untuk membangun, menguji, dan memelihara Disaster Recovery Plan (DRP) yang patuh terhadap **ISO 22301** (sesuai compliance existing kantor), dengan referensi ke NIST SP 800-34 dan BCI GPG sebagai best practice global. Dikembangkan dengan kemungkinan komersialisasi di masa depan.
 
-**Misi:** Mengubah DR planning dari proses dokumentasi statis yang berjam-jam menjadi workflow kolaboratif yang dibantu AI — dengan output yang siap-audit, dapat di-ekspor, dan dapat di-uji.
+**Misi:** Mengubah DR planning dari proses dokumentasi statis yang berjam-jam menjadi workflow kolaboratif yang dibantu AI — dengan output yang siap-audit, dapat di-ekspor, dan dapat di-uji. Mempertahankan compliance ISO 22301 yang sudah ada di kantor.
+
+### 1.1.1 Scope (revised)
+
+- **Fase 0 (sekarang):** Self-hosted tool di public cloud server kantor. Single-tenant. Internal use only. ISO 22301 primary template.
+- **Fase 1+ (future):** Mungkin dikembangkan komersial (lisensi, multi-tenant SaaS, paid tier). Keputusan komersial = separate discussion, belum diputuskan.
 
 ### 1.2 Problem Statement
 
-Saat ini (2026), DR planning di enterprise Indonesia masih menghadapi 6 masalah utama:
+DR planning di enterprise Indonesia masih menghadapi 6 masalah utama:
 
 1. **Template lama & inkonsisten** — setiap tim bikin format sendiri, tidak ada standarisasi. Dokumen Word/Excel yang tidak bisa di-version-control.
 2. **Proses manual & lambat** — bikin DRP 1 service bisa 2-4 minggu (BIA → Risk → Strategy → Procedure → Test Plan).
@@ -38,55 +43,57 @@ Saat ini (2026), DR planning di enterprise Indonesia masih menghadapi 6 masalah 
 
 ### 1.4 Success Metrics (12 bulan pertama)
 
-| Metric | Baseline (today) | Target (M12) |
-|---|---|---|
-| Time to draft DRP per service | 2-4 minggu | 1-2 hari |
-| DRP coverage (% critical service with approved DRP) | ~30% | 90% |
-| DRP tested in last 12 months | ~30% | 80% |
-| Auditor finding terkait DRP | 5-10/tahun | 0-1/tahun |
-| Plan update frequency | Every 2-3 tahun | Setiap ada perubahan infra (auto-trigger) |
-| User NPS | N/A | ≥ 50 |
+| Metric | Baseline (today) | Target (M6 internal) | Target (M12 if commercial) |
+|---|---|---|---|
+| Time to draft DRP per service | 2-4 minggu | 3-5 hari | 1-2 hari |
+| DRP coverage (% critical service with approved DRP) | ~30% | 70% (internal) | 90% |
+| DRP tested in last 12 months | ~30% | 50% | 80% |
+| Auditor finding terkait DRP | 5-10/tahun | 2-3/tahun | 0-1/tahun |
+| Plan update frequency | Every 2-3 tahun | Setiap ada perubahan infra | Auto-trigger |
+| User satisfaction (internal team) | N/A | ≥ 7/10 | NPS ≥ 50 |
 
 ---
 
-## 2. Solusi — DRPBuilder
+## 2. Solusi — ResiliPlan
 
 ### 2.1 Value Proposition
 
-> "Bikin DRP 10x lebih cepat dengan AI co-pilot yang memahami konteks, standar, dan best practice. Setiap section ter-validasi compliance. Setiap perubahan ter-audit. Setiap tahun diuji drill dengan tracking real."
+> "Bikin DRP 10x lebih cepat dengan AI co-pilot yang memahami konteks, standar, dan best practice. Setiap section ter-validasi compliance ISO 22301. Setiap perubahan ter-audit. Setiap tahun diuji drill dengan tracking real."
 
 **Tagline:** *From static document to living plan.*
 
 ### 2.2 Differentiators vs Alternatif
 
-| Capability | DRPBuilder | Word/Excel | Generic Doc (Notion/Confluence) | Enterprise BCM (Fusion, Archer) |
+| Capability | ResiliPlan | Word/Excel | Generic Doc (Notion/Confluence) | Enterprise BCM (Fusion, Archer) |
 |---|---|---|---|---|
 | AI Co-pilot per section | ✅ Built-in | ❌ | ❌ | ❌ |
-| Multi-provider AI (OpenAI/Anthropic/custom) | ✅ | ❌ | ❌ | ❌ |
-| Compliance auto-mapping (NIST/ISO/BCI) | ✅ | ❌ | ❌ | ✅ (manual) |
+| Multi-provider AI (OpenAI/Anthropic/custom) | ✅ BYO | ❌ | ❌ | ❌ |
+| ISO 22301 compliance mapping | ✅ Auto | ❌ | ❌ | ✅ (manual) |
+| NIST 800-34 + BCI GPG reference | ✅ Built-in | ❌ | ❌ | ✅ (manual) |
 | Version control + diff | ✅ | ❌ | ✅ | ✅ |
 | Approval workflow + e-sign | ✅ | ❌ | ❌ | ✅ |
-| Drill scheduling + results | ✅ | ❌ | ❌ | ❌ |
-| Multi-tenant SaaS | ✅ | ❌ | ❌ | ✅ |
+| Drill scheduling + results | ✅ (Phase 4) | ❌ | ❌ | ✅ |
+| Multi-tenant SaaS | ⏳ Future | ❌ | ❌ | ✅ |
 | Bahasa Indonesia native | ✅ | ✅ | ❌ | ❌ |
-| Harga (SMB-friendly) | $$ | Free | $ | $$$$ |
+| Self-hosted option | ✅ (default) | ✅ | ✅ | ❌ |
+| Harga (SMB-friendly) | **Free** (internal now) | Free | $ | $$$$ |
 
 ### 2.3 High-level Capabilities
 
-1. **AI-assisted drafting** — Generate section per section dengan context awareness.
-2. **Template library** — NIST SP 800-34, ISO 22301, BCI GPG, custom corporate.
+1. **AI-assisted drafting** — Generate section per section dengan context awareness. BYO API key multi-provider.
+2. **Template library** — **ISO 22301 primary** (sesuai compliance existing), NIST SP 800-34 + BCI GPG reference.
 3. **BIA (Business Impact Analysis)** — Structured form per service, hitung criticality tier.
 4. **RTO/RPO calculator** — Berdasarkan tier, dependency, recovery strategy.
 5. **Asset & dependency registry** — Linked to systems, services, third-party.
 6. **Procedure library** — Reusable runbook (recover DB, restore VM, failover DNS).
 7. **Risk register** — Link risk ke section mitigasi di DRP.
 8. **Approval workflow** — Multi-stage: Draft → Review → Approve → Sign.
-9. **Drill/test scheduler** — Schedule, capture hasil, update DRP dari learnings.
+9. **Drill/test scheduler** — Schedule, capture hasil, update DRP dari learnings. (Phase 4)
 10. **Audit trail** — Every change: who, when, what, why.
 11. **Export** — PDF (formal), DOCX (editable), Markdown (git-friendly), JSON (interop).
-12. **Collaboration** — Real-time multi-user edit, comment, mention.
-13. **API & webhook** — Integrate dengan infra (CMDB, ITSM, monitoring).
-14. **Offline mode (PWA)** — Akses DRP saat incident tanpa internet.
+12. **Collaboration** — Multi-user edit, comment, mention. (Phase 3)
+13. **API & webhook** — Integrate dengan infra (CMDB, ITSM, monitoring). (Phase 4)
+14. **Offline mode (PWA)** — Akses DRP saat incident tanpa internet. (Phase 4)
 
 ---
 
@@ -240,32 +247,35 @@ Saat ini (2026), DR planning di enterprise Indonesia masih menghadapi 6 masalah 
 
 ## 6. Teknologi & Arsitektur
 
-### 6.1 Stack Decision (Rekomendasi)
+### 6.1 Stack Decision (Final — Self-hosted, Internal)
 
 | Layer | Pilihan | Rationale |
 |---|---|---|
-| **Frontend** | Vite + React 18 + TypeScript | Fast HMR, mature, matches existing ITResilience stack, smaller bundle than Next.js untuk SaaS dashboard |
-| **UI Components** | shadcn/ui (Radix UI) + Tailwind CSS | Aesthetic, customizable, accessible, copy-paste (no dependency lock-in) |
+| **Frontend** | Vite + React 18 + TypeScript | Fast HMR, mature, matches ITResilience stack |
+| **UI Components** | shadcn/ui (Radix UI) + Tailwind CSS | Aesthetic, customizable, accessible |
 | **State** | Zustand (client) + TanStack Query (server) | Lightweight, no Redux overhead |
 | **Forms** | React Hook Form + Zod | Type-safe, performant |
 | **Routing** | React Router v6 | Standard SPA |
-| **Backend** | Fastify + TypeScript | Same as visual-agent-worker-saas, fast, schema-first |
-| **Database** | PostgreSQL (Neon/Supabase) | Multi-tenant, RLS, JSON columns |
-| **ORM** | Drizzle ORM | Type-safe, SQL-first, lightweight vs Prisma |
-| **Auth** | Lucia Auth atau Auth.js | Self-host friendly, multi-provider (email, Google, Microsoft) |
-| **AI Layer** | Vercel AI SDK (`ai` package) | Native multi-provider abstraction: `createOpenAI`, `@ai-sdk/anthropic`, custom baseURL |
-| **Job Queue** | BullMQ + Redis (Upstash) | Background AI jobs, drill reminders, email send |
-| **File Storage** | S3 / R2 | Export PDF/DOCX, attachment, drill evidence |
-| **Email** | Resend | Modern, simple API, good DX |
-| **Realtime** | Yjs + Hocuspocus | CRDT for multi-user editing, no conflict |
-| **PDF Export** | Puppeteer (HTML→PDF) atau react-pdf | High fidelity, customizable |
+| **Backend** | Fastify + TypeScript | Same as ITResCap & visual-agent-worker-saas, fast, schema-first |
+| **Database** | PostgreSQL 16 (Docker di server kantor) | Compliance ISO 22301 butuh data on-prem, JSON columns fleksibel |
+| **ORM** | Drizzle ORM | Type-safe, SQL-first, lightweight |
+| **Auth** | Lucia Auth | Self-host friendly, no third-party dependency |
+| **AI Layer** | Vercel AI SDK (`ai` package) | Multi-provider native: OpenAI / Anthropic / custom baseURL |
+| **Job Queue** | BullMQ + Redis (Docker) | Background AI jobs, drill reminders, email send |
+| **File Storage** | Local FS (server kantor) | Export PDF/DOCX, attachment, drill evidence. Path: `/var/lib/resiliplan/exports/` |
+| **Email** | SMTP (mail kantor) | No external dependency, no cost |
+| **Realtime** | Yjs + Hocuspocus (Phase 3) | CRDT for multi-user editing, self-host |
+| **PDF Export** | Puppeteer (HTML→PDF) | High fidelity, customizable |
 | **DOCX Export** | `docx` library | Programmatic generation |
 | **Logging** | Pino (server) + console (client) | Fast, structured |
-| **Observability** | Sentry + OpenTelemetry | Error tracking, trace |
-| **Deployment** | Docker + Cloudflare (frontend) + Fly.io/Railway (backend) | Low cost, fast deploy |
-| **CI/CD** | GitHub Actions | Lint, test, build, deploy |
+| **Observability** | Sentry (self-hosted atau free tier) | Error tracking |
+| **Deployment** | Docker Compose di server kantor | Sesuai existing infra, no cloud cost |
+| **CI/CD** | GitHub Actions → Docker image → manual deploy | Self-hosted, controlled release |
+| **Reverse Proxy** | Nginx (existing di server) | TLS termination, static asset serving |
+| **Backup** | Daily pg_dump ke local NAS | Disaster recovery our own infra |
+| **SSL** | Let's Encrypt via certbot | Free, auto-renew |
 
-### 6.2 Arsitektur (High-level)
+### 6.2 Arsitektur (High-level) — Self-hosted
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -273,38 +283,43 @@ Saat ini (2026), DR planning di enterprise Indonesia masih menghadapi 6 masalah 
 │  ├── shadcn/ui components                                   │
 │  ├── Zustand (client state)                                 │
 │  ├── TanStack Query (server state, cache)                   │
-│  ├── Yjs (CRDT realtime collab)                            │
-│  └── Service Worker (offline mode)                          │
+│  ├── Yjs (CRDT realtime collab) — Phase 3                   │
+│  └── Service Worker (offline mode) — Phase 4                │
 └─────────────────────────────────────────────────────────────┘
-                          │ HTTPS / WSS
+                          │ HTTPS (Nginx TLS)
                           ▼
 ┌─────────────────────────────────────────────────────────────┐
-│  Fastify API (Node.js + TypeScript)                         │
-│  ├── Routes: /auth, /orgs, /plans, /sections, /bia, ...     │
-│  ├── Middleware: auth, rate-limit, audit, RLS               │
-│  ├── AI Service Layer (Vercel AI SDK)                       │
-│  │   ├── OpenAI Provider (custom baseURL)                  │
-│  │   ├── Anthropic Provider (custom baseURL)                │
-│  │   ├── OpenAI-compatible (Together, Groq, OpenRouter)     │
-│  │   └── Custom (BYO endpoint + key)                        │
-│  ├── Job Producer (BullMQ)                                  │
-│  └── PDF/DOCX Generator                                     │
+│  Server Public Cloud Kantor (single host, Docker Compose)   │
+│  ┌────────────────────────────────────────────────────────┐ │
+│  │  Nginx (reverse proxy, TLS, static)                   │ │
+│  │  └── Fastify API (Node.js + TypeScript)               │ │
+│  │      ├── Routes: /auth, /plans, /sections, /bia, ...  │ │
+│  │      ├── AI Service Layer (Vercel AI SDK)             │ │
+│  │      │   ├── OpenAI (BYO key, custom baseURL)          │ │
+│  │      │   ├── Anthropic (BYO key, custom baseURL)      │ │
+│  │      │   ├── OpenAI-compatible (BYO URL + key)         │ │
+│  │      │   └── Local LLM via Ollama (future)             │ │
+│  │      ├── Job Producer (BullMQ)                         │ │
+│  │      ├── PDF/DOCX Generator                            │ │
+│  │      └── Static frontend build (served by Nginx)      │ │
+│  └────────────────────────────────────────────────────────┘ │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────────┐  │
+│  │ PostgreSQL   │  │ Redis        │  │ Local FS         │  │
+│  │ 16           │  │ 7            │  │ /var/lib/        │  │
+│  │ - plans      │  │ - jobs       │  │  resiliplan/     │  │
+│  │ - sections   │  │ - cache      │  │  - exports/      │  │
+│  │ - users      │  │ - sessions   │  │  - attachments/  │  │
+│  │ - audit      │  │              │  │  - evidence/     │  │
+│  └──────────────┘  └──────────────┘  └──────────────────┘  │
+│  ┌────────────────────────────────────────────────────────┐ │
+│  │  Backup: Daily pg_dump → NAS kantor                   │ │
+│  └────────────────────────────────────────────────────────┘ │
 └─────────────────────────────────────────────────────────────┘
-                          │
-        ┌─────────────────┼─────────────────┐
-        ▼                 ▼                 ▼
-┌──────────────┐  ┌──────────────┐  ┌──────────────┐
-│ PostgreSQL   │  │ Redis        │  │ S3 / R2      │
-│ (Neon)       │  │ (Upstash)    │  │ (Cloudflare) │
-│ - tenants    │  │ - jobs       │  │ - exports    │
-│ - plans      │  │ - cache      │  │ - attachments│
-│ - sections   │  │ - sessions   │  │ - evidence   │
-│ - audit      │  │              │  │              │
-└──────────────┘  └──────────────┘  └──────────────┘
-                          │
+                          │ HTTPS
                           ▼
                 ┌──────────────────┐
                 │ External AI APIs │
+                │ (BYO key only)   │
                 │ - OpenAI         │
                 │ - Anthropic      │
                 │ - Custom URL     │
@@ -312,24 +327,35 @@ Saat ini (2026), DR planning di enterprise Indonesia masih menghadapi 6 masalah 
                 └──────────────────┘
 ```
 
-### 6.3 Multi-Tenancy
+**Single-tenant assumption:** All data di satu server, satu org (PT Datacomm Diangraha). User internal kantor via LDAP integration (Phase 1+) atau local user (Phase 0).
 
-- **Strategy:** Shared database, row-level security (RLS) dengan `tenant_id` di semua tabel.
-- **Isolation:** Tenant context di-extract dari JWT, enforced di Drizzle query helper.
-- **Performance:** Index pada `tenant_id` + composite untuk query pattern umum.
+### 6.3 Multi-User (Single Tenant)
+
+- **Strategy:** Single database, multi-user, RBAC.
+- **Roles:** Admin, Coordinator, Owner, Viewer.
+- **Auth:** Local user (Phase 0) + LDAP/SSO integration (Phase 1+).
+- **Isolation:** User context di-extract dari session, enforced di Drizzle query helper.
+
+**Future multi-tenant (if commercialized later):** Add `tenant_id` column + RLS. Backward compatible karena schema akan di-redesign untuk SaaS migration.
 
 ---
 
 ## 7. AI Integration Design (Deep Dive)
 
-### 7.1 Kebutuhan
+### 7.1 Kebutuhan (revised — BYO only)
 
-User perlu fleksibilitas:
-- Pakai OpenAI langsung (default)
-- Pakai Anthropic langsung
-- Pakai OpenAI-compatible (Together, Groq, OpenRouter, local llama.cpp, vLLM)
-- Self-host dengan custom URL (on-prem LLM, corporate gateway)
-- BYO API key (data privacy)
+**Setiap user configuration punya API key sendiri (BYO — Bring Your Own).** Tidak ada default key dari aplikasi. User pilih provider yang mereka punya akses:
+
+- **OpenAI** — punya akun OpenAI, pakai gpt-4o, gpt-4o-mini, dll
+- **Anthropic** — punya akun Anthropic, pakai claude-sonnet-4-5, claude-haiku-3-5, dll
+- **OpenAI-compatible (custom URL)** — Together, Groq, OpenRouter, local llama.cpp, vLLM, Ollama, atau corporate gateway
+- **Anthropic-compatible (custom URL)** — custom deployment Anthropic-format
+
+**Kenapa BYO only:**
+- Zero cost untuk app developer (saya tidak subsidize)
+- User control penuh: model pilihan, cost control, data privacy
+- User bisa pakai model yang dia sudah subscribe (misal punya langganan Cursor/Cody yang include API)
+- Tiap user beda preferensi (beberapa suka OpenAI, beberapa Anthropic, beberapa local LLM untuk compliance)
 
 ### 7.2 Provider Abstraction Layer
 
@@ -343,13 +369,11 @@ import type { LanguageModelV1 } from 'ai';
 
 export type AIProviderConfig = {
   provider: 'openai' | 'anthropic' | 'openai-compatible' | 'anthropic-compatible';
-  apiKey: string;
-  baseURL?: string;       // custom endpoint
-  model: string;           // e.g. 'gpt-4o', 'claude-sonnet-4-5', 'llama-3.1-70b'
-  organization?: string;   // OpenAI org
+  apiKey: string;             // user-provided (BYO)
+  baseURL?: string;           // custom endpoint
+  model: string;              // e.g. 'gpt-4o', 'claude-sonnet-4-5', 'llama-3.1-70b'
+  organization?: string;      // OpenAI org (optional)
   defaultHeaders?: Record<string, string>;  // corporate proxy headers
-  maxRetries?: number;
-  timeout?: number;
 };
 
 export function createAIModel(config: AIProviderConfig): LanguageModelV1 {
@@ -358,7 +382,7 @@ export function createAIModel(config: AIProviderConfig): LanguageModelV1 {
     case 'openai-compatible':
       return createOpenAI({
         apiKey: config.apiKey,
-        baseURL: config.baseURL,  // null = default OpenAI
+        baseURL: config.baseURL,  // undefined = default OpenAI
         organization: config.organization,
         headers: config.defaultHeaders,
       })(config.model);
@@ -367,14 +391,40 @@ export function createAIModel(config: AIProviderConfig): LanguageModelV1 {
     case 'anthropic-compatible':
       return createAnthropic({
         apiKey: config.apiKey,
-        baseURL: config.baseURL,  // null = default Anthropic
+        baseURL: config.baseURL,  // undefined = default Anthropic
         headers: config.defaultHeaders,
       })(config.model);
   }
 }
 ```
 
-### 7.3 Use Cases per Section
+### 7.3 Per-User AI Configuration (Multi-Profile)
+
+Karena BYO dan tiap user beda, support **multiple AI profiles per user**:
+
+```typescript
+// Each user can have multiple AI configs
+type AIConfig = {
+  id: string;
+  user_id: string;            // belongs to specific user (not org-wide)
+  name: string;               // "OpenAI Personal", "Anthropic Work", "Local Ollama"
+  provider: 'openai' | 'anthropic' | 'openai-compatible' | 'anthropic-compatible';
+  api_key_encrypted: string;  // AES-256-GCM
+  base_url?: string;
+  default_model: string;
+  is_default: boolean;        // user's default
+  enabled: boolean;
+  settings: { temperature, max_tokens, ... };
+};
+```
+
+**UX:**
+- User buka Settings → AI Configurations
+- "+ Add provider" modal: pilih type, isi API key, base URL (optional), model, test connection, save
+- Tiap kali invoke AI, dropdown pilih config (atau pakai default)
+- Token usage tracked per user per config (untuk cost awareness, bukan billing)
+
+### 7.4 Prompt Templates per Section
 
 Setiap section punya prompt template + context builder. Contoh:
 
@@ -382,10 +432,13 @@ Setiap section punya prompt template + context builder. Contoh:
 // server/services/ai/prompts/draft-section.ts
 export const sectionPrompts = {
   'executive-summary': {
-    system: `Anda adalah konsultan DR/BCP senior. Tulis executive summary DRP yang:
-- 1 paragraf, maximum 200 kata
-- Bahasa formal tapi tidak jargon berlebihan
-- Cover: tujuan, scope, key RTO/RPO, status approval`,
+    system: `Anda adalah konsultan DR/BCP senior dengan 15+ tahun pengalaman.
+Tulis executive summary DRP yang:
+- 1 paragraf padat, maximum 200 kata
+- Bahasa formal profesional Indonesia
+- Cover: tujuan, scope, key recovery targets (RTO/RPO), recovery strategy, status approval
+- Patuh ISO 22301 (clause 5-7 high-level structure)
+- Action-oriented, bukan descriptive`,
     context: (plan) => ({
       planName: plan.name,
       serviceType: plan.service_type,
@@ -393,75 +446,83 @@ export const sectionPrompts = {
       rto: plan.rto_minutes,
       rpo: plan.rpo_minutes,
       strategy: plan.recovery_strategy,
-    }),
-    userTemplate: (ctx) => `Buat executive summary untuk DRP "${ctx.planName}".
-Service type: ${ctx.serviceType}, Tier: ${ctx.criticalityTier},
-RTO: ${ctx.rto} menit, RPO: ${ctx.rpo} menit,
-Recovery strategy: ${ctx.strategy}.`,
-  },
-
-  'procedure-recovery': {
-    system: `Anda adalah SRE senior. Buat step-by-step recovery procedure yang:
-- Numbered list, tiap step imperative + verifiable
-- Include expected duration per step
-- Include rollback jika gagal
-- Reference specific commands/tools (jangan generic)`,
-    context: (plan, asset) => ({
-      serviceType: plan.service_type,
-      strategy: plan.recovery_strategy,
-      platform: asset.platform,
-      techStack: asset.tech_stack,
-      dependencies: asset.dependencies,
+      isoCompliance: plan.iso_compliance_refs,  // auto-injected mapping
     }),
   },
   // ... dst
 };
 ```
 
-### 7.4 Streaming + Cost Control
+### 7.5 Streaming Implementation
 
 ```typescript
-// server/routes/ai/draft-section.ts (Fastify)
+// server/routes/ai/draft-section.ts
 import { streamText } from 'ai';
 
-fastify.post('/ai/draft-section', async (req, reply) => {
-  const { planId, sectionId, modelConfig } = req.body;
-  const plan = await loadPlan(planId);
-  const section = plan.sections.find(s => s.id === sectionId);
-  const model = createAIModel(modelConfig);
+fastify.post('/api/ai/draft-section', async (req, reply) => {
+  const { planId, sectionId, aiConfigId } = req.body;
+  const userId = req.user.id;
 
-  // Track token usage
-  const usageTracker = new TokenUsageTracker(req.user.orgId);
+  // Load context
+  const plan = await planService.getPlan(planId);
+  const section = await planService.getSection(sectionId);
+  const aiConfig = await aiService.getConfig(userId, aiConfigId);
 
+  // Build prompt
+  const prompt = sectionPrompts[section.template_key];
+  const ctx = prompt.buildContext(plan, section);
+  const userPrompt = prompt.buildUserPrompt(ctx);
+
+  // Create model from user's config
+  const model = createAIModel({
+    provider: aiConfig.provider,
+    apiKey: aiService.decryptKey(aiConfig.api_key_encrypted),
+    baseURL: aiConfig.base_url,
+    model: aiConfig.default_model,
+  });
+
+  // Stream
   return streamText({
     model,
-    system: sectionPrompts[section.template].system,
-    prompt: buildPrompt(section, plan),
-    onFinish: (result) => {
-      usageTracker.log({
-        model: modelConfig.model,
+    system: prompt.system,
+    prompt: userPrompt,
+    onFinish: async (result) => {
+      await aiService.logUsage({
+        userId,
+        planId,
+        sectionId,
+        provider: aiConfig.provider,
+        model: aiConfig.default_model,
         promptTokens: result.usage.promptTokens,
         completionTokens: result.usage.completionTokens,
-        cost: estimateCost(modelConfig.model, result.usage),
       });
     },
   }).toDataStreamResponse();
 });
 ```
 
-### 7.5 AI Features Mapping
+### 7.6 Cost Awareness (Per-User Tracking)
+
+Tidak ada billing (BYO = user bayar langsung ke provider). Tapi log usage untuk **awareness**:
+
+- Per user, per config, per model
+- Daily / monthly aggregation
+- Dashboard widget: "This month you used 245K tokens with OpenAI gpt-4o (est. $2.45)"
+- Alert kalau usage > threshold (configurable, default 1M tokens/bulan)
+
+### 7.7 AI Features Mapping
 
 | Section | AI Capability | Trigger |
 |---|---|---|
-| Executive Summary | Auto-draft | User click "Generate" |
+| Executive Summary | Auto-draft (ISO 22301-aligned) | User click "Generate" |
 | Scope | Auto-suggest scope items | New plan created |
 | Assumptions | Consistency check | On save |
-| Roles & Responsibilities | Suggest roles from org chart | On create |
+| Roles & Responsibilities | Suggest roles from local user list | On create |
 | System Description | Auto-draft from asset metadata | Asset linked |
 | Risk Assessment | Suggest risks from system type | New section |
 | Recovery Strategy | Recommend strategy from BIA tier | BIA saved |
 | Communication Plan | Template with org data | Template selection |
-| Activation Criteria | Best practice injection | On view |
+| Activation Criteria | Best practice injection (NIST + ISO) | On view |
 | Procedure | Auto-draft runbook from system type | User click |
 | Validation | Cross-check RTO/RPO vs procedure time | On save |
 | Test Plan | Suggest test scenarios from strategy | On view |
@@ -613,157 +674,226 @@ ai_configurations (id, tenant_id, name, provider, base_url, api_key_encrypted, d
 
 ## 10. Implementation Roadmap
 
-### Phase 1 — MVP (Bulan 1-3)
+**Pendekatan:** Build internal-use tool dulu, validasi dipakai internal, baru consider commercial. Phase di bawah reflect internal use case (PT Datacomm Diangraha).
+
+### Phase 0 — Foundation (Bulan 1)
+
+**Tujuan:** Setup project, deploy infra dasar, prove the build.
+
+**Scope:**
+- Repo `~/ITResilience_Prod/ResiliPlan` (rename dari `DRPBuilder`)
+- Monorepo structure: `apps/web` (Vite+React), `apps/api` (Fastify), `packages/shared` (types)
+- Docker Compose: PostgreSQL 16, Redis 7, Fastify API, Nginx reverse proxy
+- Basic Fastify "hello world" + health check
+- Vite React "hello world" + Tailwind + shadcn/ui setup
+- Auth: Lucia Auth, local user (admin only initially)
+- CI/CD: GitHub Actions lint + test + build (no deploy yet)
+
+**Deliverable:** Bisa akses `https://resiliplan.kantor.local` (atau port forward), login sebagai admin, lihat dashboard kosong.
+
+**Definition of Done:**
+- [ ] `docker compose up` jalan tanpa error
+- [ ] API health check returns 200
+- [ ] Web app load di browser
+- [ ] Login admin → dashboard
+- [ ] Test coverage minimal (smoke test)
+- [ ] Backup script (pg_dump) jalan daily via cron
+
+### Phase 1 — Core DRP (Bulan 2-3)
 
 **Tujuan:** Bikin DRP pertama end-to-end tanpa AI.
 
 **Scope:**
 - F-01 sampai F-14 (core, no AI)
-- Single template: NIST SP 800-34 (simplified)
-- Single org, max 5 users
-- Export PDF + DOCX
-- Audit log basic
+- **Primary template: ISO 22301** (sesuai compliance existing), dengan NIST 800-34 + BCI GPG sebagai compliance mapping reference
+- Single org, max 5 user (admin, coordinator, owner, viewer)
+- Export PDF (cover, TOC, signature) + DOCX
+- Audit log basic (every change captured)
 
-**Deliverable:** User bisa bikin DRP, edit section, submit approval, export PDF.
+**Deliverable:** User bisa bikin DRP ISO 22301-compliant, edit 14 section, submit approval, export PDF siap-audit.
 
 **Definition of Done:**
-- [ ] User signup → onboard wizard → create first DRP dari template
-- [ ] Edit 12 section (executive summary sampai lampiran) dengan Markdown editor
-- [ ] Submit for review → Approver lihat di queue → Approve dengan e-sign
-- [ ] Export PDF dengan cover, TOC, signatures
+- [ ] User login (admin/koordinator) → dashboard
+- [ ] Create new DRP dari ISO 22301 template
+- [ ] Edit 14 section dengan Markdown WYSIWYG editor
+- [ ] AI-free drafting (user manual input + template skeleton)
+- [ ] Compliance auto-mapping: section X → ISO 22301 clause Y (visual badge di UI)
+- [ ] Submit for review → Approver approve dengan e-sign (simple text + timestamp)
+- [ ] Export PDF dengan cover page, TOC, ISO compliance reference
 - [ ] Export DOCX editable
-- [ ] Audit log capture semua perubahan
-- [ ] vitest ≥ 80% coverage untuk business logic
-- [ ] Deploy ke staging (cloud)
+- [ ] Audit log: every change tracked
+- [ ] vitest ≥ 70% coverage business logic
+- [ ] Deploy ke server kantor, accessible via internal URL
 
 ### Phase 2 — AI Co-pilot (Bulan 4-5)
 
-**Tujuan:** AI assist untuk drafting & review.
+**Tujuan:** AI assist untuk drafting & review. BYO only.
 
 **Scope:**
 - F-20 sampai F-29 (AI features)
 - 4 section dengan AI: executive summary, system description, risk, procedure
-- Multi-provider (OpenAI, Anthropic, custom URL)
+- Per-user AI config (BYO key)
+- Multi-provider: OpenAI, Anthropic, custom URL (Together, Groq, Ollama, dll)
 - Streaming response
-- Token usage tracking
+- Token usage tracking per user (awareness, no billing)
 
-**Deliverable:** User bisa click "Generate" di section tertentu, AI draft real-time, user edit lalu save.
+**Deliverable:** User bisa configure AI provider mereka sendiri, click "Generate" di section tertentu, AI draft real-time, user edit lalu save.
 
 **Definition of Done:**
-- [ ] Configure AI provider (OpenAI + Anthropic + 1 custom)
-- [ ] Test connection works
+- [ ] Settings → AI Configurations UI
+- [ ] Configure 3 types: OpenAI, Anthropic, OpenAI-compatible custom URL
+- [ ] Test connection works (minimal request, verify response)
 - [ ] AI draft 4 section types dengan streaming
-- [ ] Token usage logged per org
+- [ ] Token usage logged per user per config
+- [ ] Cost awareness widget di dashboard
 - [ ] Fallback: kalau AI fail, user bisa input manual
-- [ ] Cost warning saat mendekati budget
+- [ ] Encryption: API key AES-256-GCM at rest
 
 ### Phase 3 — Collaboration (Bulan 6-7)
 
-**Tujuan:** Multi-user, real-time.
+**Tujuan:** Multi-user, real-time edit.
 
 **Scope:**
 - F-30 sampai F-34
 - Comments dengan thread, mention, resolve
 - Activity feed
 - Email + in-app notification
+- Yjs + Hocuspocus untuk real-time collab
 
-**Deliverable:** Tim bisa collaborate di DRP yang sama secara real-time.
+**Deliverable:** Tim bisa collaborate di DRP yang sama secara real-time, dengan comment thread.
 
-### Phase 4 — Enterprise (Bulan 8-10)
+### Phase 4 — Enterprise (Bulan 8-10) — IF going commercial
 
 **Tujuan:** Drill, compliance, integrasi.
 
-**Scope:**
-- F-40 sampai F-50
-- Drill scheduler + capture + AI report
-- Risk register + asset registry
-- Compliance mapping (NIST, ISO, BCI)
-- Auditor package export
-- Webhook + API
-- SSO (Google, Microsoft)
-- PWA offline mode
-- White-label (P2)
+**Note:** Phase ini only relevant kalau ada decision untuk commercialize. Untuk internal use, beberapa fitur ini bisa di-skip atau di-simplify.
 
-**Deliverable:** Enterprise-ready, siap untuk organisasi 100+ user.
+**Scope (subset for internal):**
+- Drill scheduler + capture (simple: list, status, notes)
+- Risk register (linked to plan section)
+- Asset registry (linked to plan)
+- Compliance mapping dashboard (visualisasi ISO 22301 coverage)
+- Auditor package export (ZIP: DRP + drill history + change log)
+- Webhook (CMDB change → DRP review notification)
+
+**Scope (only if commercial):**
+- SSO (Google, Microsoft)
+- Multi-tenant
+- Payment
+- PWA offline mode
+- White-label
 
 ### Phase 5 — Scale (Bulan 11-12+)
 
-- Mobile app (React Native atau PWA enhanced)
-- Marketplace: share template antar org
-- AI agent: proactive review (scheduled job, flag outdated)
-- Integration marketplace: ServiceNow, Jira, Datadog, PagerDuty
+**Only if commercial decision made. Otherwise stop di Phase 4 internal.**
+
 - Multi-region, data residency per tenant
+- Mobile app
+- Template marketplace
+- Integration marketplace: ServiceNow, Jira, Datadog, PagerDuty
+- AI agent: proactive review (scheduled job, flag outdated)
 
 ---
 
-## 11. Pricing Model (Saran)
+## 11. Pricing & Distribution (revised)
 
-| Tier | User | Plans | AI tokens/mo | Price (IDR/bln) | Target |
-|---|---|---|---|---|---|
-| **Free** | 3 | 3 | 100K | 0 | Trial / SMB |
-| **Starter** | 10 | 20 | 1M | 500K | SMB |
-| **Pro** | 30 | 100 | 5M | 2.5M | Mid-market |
-| **Enterprise** | Unlimited | Unlimited | Custom | Custom | Large org |
+**ResiliPlan Free Edition (Phase 0-1) — Internal Use Only**
 
-**AI cost margin:** Default 30% markup di atas provider cost. BYO API key = no markup.
+| Aspek | Detail |
+|---|---|
+| **Harga** | **GRATIS** untuk internal PT Datacomm Diangraha |
+| **License** | Proprietary — All rights reserved (kantor), tidak untuk distribusi |
+| **Distribution** | Self-hosted di server kantor, accessible via internal URL |
+| **Support** | Internal (Erwin + tim) |
+| **User limit** | Max ~20 user internal (untuk Phase 0-1) |
+| **AI cost** | BYO — user bayar sendiri ke provider |
+
+**Future Commercial (Phase 2+, NOT YET DECIDED):**
+
+| Tier | Target | Harga (Saran) | Status |
+|---|---|---|---|
+| **Community** | Open source self-host | Free (MIT atau BUSL) | ⏳ TBD post-Phase 1 |
+| **Pro** | SMB SaaS | $30-50/user/mo | ⏳ TBD post-Phase 1 |
+| **Enterprise** | Large org | Custom | ⏳ TBD post-Phase 1 |
+
+**Catatan:** Keputusan commercial = future discussion. Fokus sekarang: build internal tool, validate usage, get feedback, baru decide apakah mau SaaS-kan.
 
 ---
 
-## 12. Risks & Mitigation
+## 12. Risks & Mitigation (revised)
 
 | Risk | Likelihood | Impact | Mitigation |
 |---|---|---|---|
-| AI hallucination di DRP (generated content tidak valid) | High | High | Always human-in-the-loop, AI = draft, never auto-publish. Validation rules + consistency check. |
-| AI cost blow-up (uncontrolled token usage) | Medium | High | Per-org rate limit, budget alert, BYO API key option. |
-| Multi-tenant data leak | Low | Critical | RLS enforced di DB level, integration tests, regular audit. |
-| Adoption rendah (user masih prefer Word) | Medium | High | Strong template library, free tier generous, success story showcase. |
-| Compliance complexity (NIST/ISO/BCI) | Medium | Medium | Partner dengan auditor untuk validate mapping, quarterly update. |
-| LLM provider outage | Low | Medium | Multi-provider support, fallback ke provider lain. |
-| Indonesian language quality (model mix ID/EN) | Medium | Low | Curated prompt library, ID-specific testing. |
+| AI hallucination di DRP (generated content tidak valid) | High | High | Always human-in-the-loop, AI = draft, never auto-publish. Validation rules + consistency check. ISO 22301 clause reference sebagai anchor. |
+| AI cost blow-up (per-user) | Low | Low | BYO = user tanggung sendiri. App cuma log usage untuk awareness, no billing. |
+| Self-hosted infra failure (server down) | Low | High | Backup daily ke NAS, restore RTO < 1h. Phase 1 use single server, monitor uptime. |
+| Adoption rendah (user lebih prefer Word) | Medium | High | Strong template library ISO 22301, free, simple UX. Internal champion (DR coordinator) untuk promote. |
+| ISO 22301 mapping akurasi rendah | Medium | High | Validate dengan auditor internal sebelum launch. Quarterly review. |
+| LLM provider outage | Low | Medium | Multi-provider support (BYO), fallback ke provider lain / input manual. |
+| Indonesian language quality (model mix ID/EN) | Medium | Low | Curated prompt library, ID-specific testing, instruct model untuk output ID. |
+| API key bocor (encryption failure) | Low | Critical | AES-256-GCM dengan key dari env terpisah. Never log API key. Periodic key rotation. |
+| User lupa save / concurrent edit conflict | Medium | Medium | Auto-save (Phase 3+), conflict detection, version history. |
 
 ---
 
-## 13. Technical Decisions Log
+## 13. Technical Decisions Log (Final)
 
 | # | Decision | Rationale | Alternative Considered |
 |---|---|---|---|
-| 1 | Vite + React (bukan Next.js) | Smaller bundle, lebih cocok untuk dashboard SaaS, consistency dengan ITResilience stack | Next.js (App Router) — heavier, lebih cocok untuk marketing site + app |
-| 2 | PostgreSQL (bukan SQLite) | Multi-tenant SaaS butuh concurrent write, RLS, JSON columns | SQLite (single tenant) — too limiting |
+| 1 | Vite + React (bukan Next.js) | Smaller bundle, lebih cocok untuk internal dashboard, consistency dengan ITResilience stack | Next.js (App Router) — heavier, lebih cocok untuk marketing site |
+| 2 | PostgreSQL 16 (bukan SQLite) | Compliance ISO 22301 butuh proper DB, concurrent write, JSON columns, full SQL | SQLite — too limiting untuk production |
 | 3 | Vercel AI SDK (bukan LangChain) | Native multi-provider, streaming, function calling, simpler API | LangChain — too heavy, abstraction overhead |
 | 4 | Drizzle ORM (bukan Prisma) | SQL-first, type-safe, lebih ringan, lebih dekat ke raw SQL | Prisma — heavier, generated client |
 | 5 | Yjs + Hocuspocus (bukan Liveblocks) | Self-host friendly, no vendor lock-in, mature CRDT | Liveblocks — proprietary, paid |
-| 6 | Fastify (bukan Express) | 2-3x faster, schema-first, plugin ecosystem | Express — older, slower |
-| 7 | shadcn/ui (bukan Material UI / Ant Design) | Copy-paste (no dep lock-in), customizable, modern aesthetic | MUI / AntD — heavier, opinionated |
-| 8 | BullMQ + Redis (bukan Cloudflare Queues) | Mature, support complex job patterns, dead letter queue | Cloudflare Queues — simpler tapi less flexible |
+| 6 | Fastify (bukan Express) | 2-3x faster, schema-first, plugin ecosystem, sama dengan visual-agent-worker-saas | Express — older, slower |
+| 7 | shadcn/ui (bukan Material UI / Ant Design) | Copy-paste (no dep lock-in), customizable, modern aesthetic, accessible | MUI / AntD — heavier, opinionated |
+| 8 | BullMQ + Redis (bukan Cloudflare Queues) | Mature, support complex job patterns, dead letter queue, self-host | Cloudflare Queues — simpler tapi less flexible |
+| 9 | Monorepo (Turborepo) untuk apps/web + apps/api + packages/shared | Type sharing antara FE & BE, simpler refactor, single CI | Separate repos — overhead |
+| 10 | Self-hosted Docker Compose (bukan Kubernetes) | Single server internal, simpler ops, less infrastructure-as-code overhead | K8s — overkill untuk internal tool |
+| 11 | ISO 22301 primary template (bukan NIST 800-34) | Kantor sudah comply ISO 22301, mapping NIST + BCI sebagai reference | NIST 800-34 — US-centric, less applicable |
+| 12 | BYO AI key only (bukan default key) | Zero cost ke app developer, user control, multi-provider flexibility | Default key + billing — overhead, low margin |
+| 13 | Proprietary license (bukan open source) | Initial scope internal, commercialization TBD, semua rights reserved | Open source (MIT/AGPL) — premature decision |
+| 14 | Single tenant (bukan multi-tenant) | Internal use only, simpler data model, faster MVP | Multi-tenant — premature, schema akan di-redesign kalau commercial |
+| 15 | Local FS storage (bukan S3) | Self-hosted, no external dependency, simpler | S3-compatible — butuh extra service, overkill untuk internal |
 
 ---
 
-## 14. Open Questions (perlu decision sebelum implementasi)
+## 14. Locked Decisions (was Open Questions — resolved 2026-06-20)
 
-1. **Hosting model:** Self-host full stack di Indonesia (compliance advantage) atau pakai global cloud (AWS/Cloudflare) dengan data residency config?
-2. **Open source vs closed:** Open core (DRPBuilder core open, AI features paid) atau fully closed?
-3. **BYO API key:** Mandatory dari awal atau gradual (free tier pakai default key, paid tier BYO)?
-4. **First template:** NIST SP 800-34 (most common) atau ISO 22301 (international) atau BCI (UK, mature)?
-5. **Pricing:** Confirm tiers di atas, terutama free tier limit (3 plans? 1? unlimited?).
-6. **Branding:** Nama "DRPBuilder" working title, atau ada brand preference?
+| # | Question | Decision | Rationale |
+|---|---|---|---|
+| 1 | Hosting model | **Self-host di public cloud server kantor** (existing infra) | Data on-prem, compliance advantage, no cloud cost, internal use only |
+| 2 | Open source vs closed | **Proprietary — all rights reserved, internal use** | Premature untuk decide. Bisa di-revisit post-Phase 1 kalau ada rencana commercial |
+| 3 | BYO API key | **BYO only, no default key** | Zero cost ke app, user control, multi-provider flexibility. User config per-user (multiple profile) |
+| 4 | First template | **ISO 22301 primary** + NIST 800-34 + BCI GPG sebagai compliance mapping reference | Kantor sudah comply ISO 22301. NIST + BCI sebagai best-practice global references |
+| 5 | Pricing | **Free edition internal use only**, no paid tier saat ini | Build dulu, validate usage, decide commercial nanti. Phased approach |
+| 6 | Branding | **ResiliPlan** | Verified memorable, descriptive, unique. Domain + trademark check masih perlu dilakukan |
+
+**Action items (pending):**
+- [ ] Check domain `resiliplan.com`, `resiliplan.id`, `resiliplan.co` availability
+- [ ] Check trademark (USPTO + DJKI Indonesia)
+- [ ] Check social handles: @resiliplan di X, LinkedIn, GitHub
+- [ ] Logo design (bold wordmark + simple icon)
 
 ---
 
-## 15. Success Criteria (Phase 1 MVP)
+## 15. Success Criteria (Phase 1 MVP — Internal)
 
 **Quantitative:**
-- 50 org signup dalam 3 bulan post-launch
-- 500 DRP created dalam 6 bulan
-- 80% user bikin ≥1 DRP dalam 14 hari pertama
-- AI draft success rate ≥ 95% (no error, no timeout)
+- 5+ DRP created di internal (PT Datacomm) dalam 3 bulan post-launch
+- 70% critical service punya approved DRP dalam 6 bulan
+- Time to draft DRP per service turun dari 2-4 minggu ke 3-5 hari
+- ISO 22301 compliance check pass di internal audit
 - Page load P95 < 1.5s
-- Test coverage ≥ 80%
+- Test coverage ≥ 70%
+- Backup daily ke NAS jalan tanpa missed day
+- Uptime ≥ 99% (allow 7.2h downtime/bulan untuk maintenance)
 
 **Qualitative:**
-- User dapat bikin DRP dari 0 sampai approved dalam < 1 hari
-- User merasa AI co-pilot "berguna", bukan gimmick
-- Auditor dapat extract compliance evidence dalam < 10 menit
+- DR Coordinator bisa bikin DRP dari 0 sampai approved dalam < 5 hari
+- Auditor internal bisa verify ISO 22301 compliance dalam < 1 jam
 - Tim tidak perlu tanya "gimana format DRP yang bener" lagi
+- AI co-pilot (Phase 2) bikin drafting terasa "scaffolding" bukan "gimmick"
 
 ---
 
@@ -797,22 +927,26 @@ ai_configurations (id, tenant_id, name, provider, base_url, api_key_encrypted, d
 | **DR Drill** | Test exercise untuk validasi DRP |
 | **CRDT** | Conflict-free Replicated Data Type — untuk real-time collab |
 
-### Lampiran B: Section List (NIST SP 800-34 simplified)
+### Lampiran B: Section List (ISO 22301-aligned)
 
-1. Ringkasan Eksekutif / Executive Summary
-2. Pendahuluan / Introduction
-3. Tujuan dan Scope / Purpose & Scope
-4. Asumsi dan Kendala / Assumptions & Constraints
-5. Konsep Operasional / Concept of Operations
-6. Deskripsi Sistem / System Description
-7. Penilaian Dampak Bisnis (BIA) / Business Impact Analysis
-8. Strategi Pemulihan / Recovery Strategy
-9. Rencana Komunikasi / Communication Plan
-10. Kriteria Aktivasi / Activation Criteria
-11. Prosedur Pemulihan / Recovery Procedures
-12. Validasi dan Pengujian / Validation & Testing
-13. Pemeliharaan Plan / Plan Maintenance
-14. Lampiran / Appendices
+Section list untuk template ISO 22301 (primary), dengan mapping ke NIST SP 800-34 + BCI GPG sebagai reference:
+
+| # | Section (ID) | ISO 22301 Clause | NIST 800-34 Ref | BCI GPG Ref |
+|---|---|---|---|---|
+| 1 | Ringkasan Eksekutif / Executive Summary | 4.3 Scope, 5.2 Policy | Section 1 (Exec Summary) | Section 2.1 |
+| 2 | Pendahuluan / Introduction | 4.1 Understanding org | Section 1 (Intro) | Section 2.2 |
+| 3 | Tujuan dan Scope / Purpose & Scope | 4.3 Scope | Section 1 (Purpose & Scope) | Section 2.3 |
+| 4 | Asumsi dan Kendala / Assumptions & Constraints | 4.4 Context | Section 1 (Assumptions) | Section 2.4 |
+| 5 | Konsep Operasional / Concept of Operations | 5.3-5.7 Planning | Section 2 (Concept of Operations) | Section 3 |
+| 6 | Deskripsi Sistem / System Description | 4.4 Context (interested parties) | Section 3 (System Description) | Section 3.1 |
+| 7 | Penilaian Dampak Bisnis (BIA) / Business Impact Analysis | 8.2 BIA | Section 4 (BIA) | Section 4.1 |
+| 8 | Strategi Pemulihan / Recovery Strategy | 8.3-8.5 BC strategy | Section 5 (Recovery Strategy) | Section 4.2 |
+| 9 | Rencana Komunikasi / Communication Plan | 7.4 Communication | Section 6 (Communication) | Section 5.1 |
+| 10 | Kriteria Aktivasi / Activation Criteria | 8.5 BC procedures | Section 6 (Activation) | Section 5.2 |
+| 11 | Prosedur Pemulihan / Recovery Procedures | 8.5 BC procedures | Section 7 (Procedures) | Section 5.3 |
+| 12 | Validasi dan Pengujian / Validation & Testing | 9.3 Management review, 8.6 Testing | Section 8 (Testing) | Section 6 |
+| 13 | Pemeliharaan Plan / Plan Maintenance | 10.1 Continual improvement, 9.2 Internal audit | Section 9 (Maintenance) | Section 7 |
+| 14 | Lampiran / Appendices | (varying) | Appendix A-D | Section 8 |
 
 ---
 
