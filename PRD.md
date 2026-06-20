@@ -863,17 +863,28 @@ ai_configurations (id, tenant_id, name, provider, base_url, api_key_encrypted, d
 | # | Question | Decision | Rationale |
 |---|---|---|---|
 | 1 | Hosting model | **Self-host di public cloud server kantor** (existing infra) | Data on-prem, compliance advantage, no cloud cost, internal use only |
-| 2 | Open source vs closed | **Proprietary — all rights reserved, internal use** | Premature untuk decide. Bisa di-revisit post-Phase 1 kalau ada rencana commercial |
+| 2 | Open source vs closed | **Open source — MIT License** | Push ke GitHub sebagai free source. MIT = permissive, enterprise-friendly, max adoption |
 | 3 | BYO API key | **BYO only, no default key** | Zero cost ke app, user control, multi-provider flexibility. User config per-user (multiple profile) |
 | 4 | First template | **ISO 22301 primary** + NIST 800-34 + BCI GPG sebagai compliance mapping reference | Kantor sudah comply ISO 22301. NIST + BCI sebagai best-practice global references |
-| 5 | Pricing | **Free edition internal use only**, no paid tier saat ini | Build dulu, validate usage, decide commercial nanti. Phased approach |
+| 5 | Pricing | **Free, open source, internal use first** | Build internal tool, validate, push ke GitHub sebagai free source. Commercial = future decision post-public-launch |
 | 6 | Branding | **ResiliPlan** | Verified memorable, descriptive, unique. Domain + trademark check masih perlu dilakukan |
+
+**License details (MIT):**
+- Free untuk personal, commercial, modification, distribution
+- Patent grant implicit (MIT License)
+- No copyleft (vs AGPL/GPL) — easier enterprise adoption
+- Compatible dengan hampir semua proprietary code (permissive)
+- Trademark: "ResiliPlan" nama bisa di-trademark terpisah (TBD)
 
 **Action items (pending):**
 - [ ] Check domain `resiliplan.com`, `resiliplan.id`, `resiliplan.co` availability
 - [ ] Check trademark (USPTO + DJKI Indonesia)
-- [ ] Check social handles: @resiliplan di X, LinkedIn, GitHub
+- [ ] Create GitHub repo: `datacomm-diangraha/resiliplan` (or personal)
 - [ ] Logo design (bold wordmark + simple icon)
+- [ ] Verify all dependency licenses compatible dengan MIT
+- [ ] Audit gap analysis `docs/gap-analysis.md` → execute P0 actions sebelum public release
+
+**Production readiness reference:** Lihat [`docs/gap-analysis.md`](./docs/gap-analysis.md) untuk comprehensive gap analysis vs production best practice. Top 10 P0 actions harus di-execute sebelum public GitHub release (~30 hours work).
 
 ---
 
