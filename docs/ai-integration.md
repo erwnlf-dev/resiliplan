@@ -1,17 +1,19 @@
-# DRPBuilder — AI Integration Design
+# ResiliPlan — AI Integration Design
 
 > Deep dive ke AI provider abstraction, prompt engineering, dan cost control.
+> **Note (2026-06-20):** BYO only — no default key. Per-user multi-profile.
 
 ## 1. Goals
 
-DRPBuilder AI harus:
+ResiliPlan AI harus:
 1. **Multi-provider** — OpenAI, Anthropic, OpenAI-compatible, Anthropic-compatible, custom URL
-2. **BYO API key** — user bisa pakai key sendiri (privacy & cost)
-3. **Streaming** — real-time UX, time-to-first-token < 2s
-4. **Cost-aware** — token tracking, budget alert, hard stop
-5. **Context-aware** — prompt di-inject dengan plan, asset, BIA, dependencies
-6. **Best-practice aware** — reference NIST/ISO controls, recovery patterns
-7. **Multi-language** — ID + EN, switchable per request
+2. **BYO only** — setiap user config punya API key sendiri. **No default key** dari app. User pakai key yang dia sudah punya akses (OpenAI, Anthropic, atau custom deployment)
+3. **Per-user multi-profile** — user bisa setup multiple AI config (e.g., "OpenAI Personal", "Anthropic Work", "Local Ollama")
+4. **Streaming** — real-time UX, time-to-first-token < 2s
+5. **Cost awareness (no billing)** — token tracking per-user untuk awareness. App tidak charge, user bayar sendiri ke provider
+6. **Context-aware** — prompt di-inject dengan plan, asset, BIA, dependencies, ISO 22301 clause
+7. **Best-practice aware** — reference ISO 22301, NIST 800-34, BCI GPG controls per section
+8. **Multi-language** — ID + EN, default ID untuk konsistensi dengan internal team
 
 ## 2. Provider Configuration Model
 
