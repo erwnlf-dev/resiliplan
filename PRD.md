@@ -674,43 +674,135 @@ ai_configurations (id, tenant_id, name, provider, base_url, api_key_encrypted, d
 
 ## 10. Implementation Roadmap
 
-**Pendekatan:** Build internal-use tool dulu, validasi dipakai internal, baru consider commercial. Phase di bawah reflect internal use case (PT Datacomm Diangraha).
+### 📊 Quick Reference
 
-### Phase 0 — Foundation (Bulan 1)
+| Phase | Period | Focus | Maturity Target | Status |
+|---|---|---|---|---|
+| **0a** | Week 1-2 | Production Readiness (P0 gaps) | 5.0 → 6.5 | ⏳ Planning |
+| **0b** | Week 3-4 | Foundation Infrastructure | 6.5 → 7.0 | ⏳ Planning |
+| **1** | Bulan 2-3 | Core DRP + operational (P1) | 7.0 → 7.5 | ⏳ Planning |
+| **2** | Bulan 4-5 | AI Co-pilot + tracing (P1) | 7.5 → 8.0 | ⏳ Planning |
+| **3** | Bulan 6-7 | Collaboration + SLO (P2) | 8.0 → 8.5 | ⏳ Future |
+| **4** | Bulan 8-10 | Enterprise (drill, risk, asset) | 8.5 → 9.0 | ⏳ Future |
+| **5** | Bulan 11-12+ | Scale (jika commercial) | 9.0+ | ⏳ Future |
 
-**Tujuan:** Setup project, deploy infra dasar, prove the build.
+**Pendekatan:** Build internal-use tool dulu, validasi dipakai internal, push ke GitHub sebagai open source (MIT), iterate based on community feedback.
+
+**Penting:** Sebelum mulai code, **harus execute Phase 0a (Production Readiness Prerequisites)** dari gap analysis di [`docs/gap-analysis.md`](./docs/gap-analysis.md). Top 10 P0 actions harus done sebelum public GitHub release. Maturity score saat ini: 5.0/10.
+
+### Phase 0a — Production Readiness Prerequisites (Week 1-2)
+
+**Tujuan:** Close critical P0 gaps dari gap analysis SEBELUM mulai code. Target: maturity score 6.5/10 (production-ready for internal use + safe untuk public GitHub).
+
+**Why first:** Gap analysis identify 10 P0 items yang harus addressed sebelum push ke GitHub publik. Tanpa ini, public release bisa expose security vulnerabilities atau fail backup/restore saat needed.
+
+**Scope (sub-phases):**
+
+**0a.1 — Open Source Boilerplate (✅ DONE — commit 69ef907)**
+- [x] LICENSE → MIT
+- [x] CONTRIBUTING.md (dev setup, PR process)
+- [x] CODE_OF_CONDUCT.md (Contributor Covenant v2.1)
+- [x] SECURITY.md (vulnerability disclosure)
+- [x] Issue templates (bug, feature, question)
+- [x] PR template
+- [x] CHANGELOG.md
+- [x] GitHub badges di README
+
+**0a.2 — Security Baseline (P0, ~6h)**
+- [ ] **Helmet** middleware: CSP, HSTS, X-Frame-Options, X-Content-Type-Options
+- [ ] **CSRF protection**: token middleware (Fastify)
+- [ ] **Rate limiting**: `@fastify/rate-limit` (per-IP + per-user)
+- [ ] **Password policy**: min 12 chars + complexity + breach check (HaveIBeenPwned)
+- [ ] **Dependabot** enabled di GitHub repo
+- [ ] **CodeQL** scanning di GitHub Actions (basic SAST)
+
+**0a.3 — Reliability Baseline (P0, ~6h)**
+- [ ] **Define RTO/RPO** untuk own infra (target: RTO 1h, RPO 15min) → `docs/dr-plan.md`
+- [ ] **Backup script**: daily pg_dump + retention (7 daily + 4 weekly + 12 monthly)
+- [ ] **Backup monitoring**: cron + alert ke Telegram jika backup fail
+- [ ] **Monthly restore test**: cron job yang auto-restore ke test DB + verify integrity
+- [ ] **Deep health check**: `/health` endpoint yang verify DB + Redis + AI provider
+
+**0a.4 — Data Integrity (P0, ~5h)**
+- [ ] **Drizzle Kit migrations**: versioned, reversible, tested
+- [ ] **FK constraints** di schema (referential integrity)
+- [ ] **UU PDP compliance**: `/api/me/export` (data export) + `/api/me/delete` (right to be forgotten)
+- [ ] **Data retention policy**: audit log 7y, plan indefinite, drafts 90d auto-purge
+
+**0a.5 — API Standard (P0, ~6h)**
+- [ ] **API versioning**: `/api/v1/...` prefix
+- [ ] **OpenAPI 3.1 spec**: auto-generated dari Zod schemas
+- [ ] **Swagger UI**: served di `/api/docs`
+- [ ] **Standard error response**: RFC 7807 (Problem Details)
+- [ ] **Request ID middleware**: `X-Request-ID` propagation
+
+**0a.6 — Threat Model & Documentation (P1, ~4h)**
+- [ ] **Threat model** document (STRIDE): `docs/threat-model.md`
+- [ ] **Runbook** skeleton: `docs/runbook.md` (common incidents)
+- [ ] **Onboarding guide** untuk new contributor
+
+**Deliverable:** Repo siap untuk code AND siap untuk public GitHub release (security baseline + open source boilerplate done).
+
+**Definition of Done:**
+- [ ] Helmet + CSRF + rate limiting verified working
+- [ ] Dependabot PRs auto-created
+- [ ] Backup script tested (manual + 1x auto restore)
+- [ ] OpenAPI spec generated + Swagger UI accessible
+- [ ] Migrations setup + 1 sample migration tested
+- [ ] Threat model + runbook docs committed
+- [ ] Maturity score re-evaluated: target 6.5/10
+
+---
+
+### Phase 0b — Foundation Infrastructure (Week 3-4)
+
+**Tujuan:** Setup monorepo, infrastructure dasar, prove the build.
 
 **Scope:**
-- Repo `~/ITResilience_Prod/ResiliPlan` (rename dari `DRPBuilder`)
-- Monorepo structure: `apps/web` (Vite+React), `apps/api` (Fastify), `packages/shared` (types)
-- Docker Compose: PostgreSQL 16, Redis 7, Fastify API, Nginx reverse proxy
-- Basic Fastify "hello world" + health check
-- Vite React "hello world" + Tailwind + shadcn/ui setup
-- Auth: Lucia Auth, local user (admin only initially)
-- CI/CD: GitHub Actions lint + test + build (no deploy yet)
+- [ ] Monorepo structure: `apps/web` (Vite+React), `apps/api` (Fastify), `packages/shared` (types)
+- [ ] Docker Compose: PostgreSQL 16, Redis 7, Fastify API, Nginx reverse proxy
+- [ ] **DB connection pool**: pg pool max 20 connections
+- [ ] Basic Fastify "hello world" + health check
+- [ ] Vite React "hello world" + Tailwind + shadcn/ui setup
+- [ ] **Error boundary** per route (frontend)
+- [ ] Auth: Lucia Auth, local user (admin only initially)
+- [ ] Conventional commits + husky pre-commit hooks
+- [ ] CI/CD: GitHub Actions lint + test + build (no deploy yet)
+- [ ] Container image published ke ghcr.io
 
-**Deliverable:** Bisa akses `https://resiliplan.kantor.local` (atau port forward), login sebagai admin, lihat dashboard kosong.
+**Deliverable:** Bisa akses `https://resiliplan.kantor.local` (atau port forward), login sebagai admin, lihat dashboard kosong. Docker image published ke GitHub Container Registry.
 
 **Definition of Done:**
 - [ ] `docker compose up` jalan tanpa error
-- [ ] API health check returns 200
-- [ ] Web app load di browser
+- [ ] API `/health` returns 200 (deep check: DB + Redis connected)
+- [ ] Web app load di browser tanpa console error
+- [ ] Error boundary tested (force throw, verify fallback UI)
 - [ ] Login admin → dashboard
 - [ ] Test coverage minimal (smoke test)
-- [ ] Backup script (pg_dump) jalan daily via cron
+- [ ] Container image published ke ghcr.io
+- [ ] Conventional commits enforced (commitlint)
+- [ ] Pre-commit hook (lint + format) jalan
+
+---
 
 ### Phase 1 — Core DRP (Bulan 2-3)
 
 **Tujuan:** Bikin DRP pertama end-to-end tanpa AI.
 
-**Scope:**
+**Scope (functional):**
 - F-01 sampai F-14 (core, no AI)
 - **Primary template: ISO 22301** (sesuai compliance existing), dengan NIST 800-34 + BCI GPG sebagai compliance mapping reference
 - Single org, max 5 user (admin, coordinator, owner, viewer)
 - Export PDF (cover, TOC, signature) + DOCX
-- Audit log basic (every change captured)
+- Audit log with append-only constraint + CSV export
 
-**Deliverable:** User bisa bikin DRP ISO 22301-compliant, edit 14 section, submit approval, export PDF siap-audit.
+**Scope (operational, from P1 gap analysis):**
+- **MFA** (TOTP) untuk admin role
+- **Runbook + incident response procedure** (`docs/incident-response.md`)
+- **Prometheus metrics endpoint** + basic Grafana dashboard
+- **Structured logging** dengan request ID propagation
+
+**Deliverable:** User bisa bikin DRP ISO 22301-compliant, edit 14 section, submit approval, export PDF siap-audit. Plus operational maturity (runbook, metrics, MFA).
 
 **Definition of Done:**
 - [ ] User login (admin/koordinator) → dashboard
@@ -721,23 +813,34 @@ ai_configurations (id, tenant_id, name, provider, base_url, api_key_encrypted, d
 - [ ] Submit for review → Approver approve dengan e-sign (simple text + timestamp)
 - [ ] Export PDF dengan cover page, TOC, ISO compliance reference
 - [ ] Export DOCX editable
-- [ ] Audit log: every change tracked
+- [ ] Audit log: every change tracked, append-only, exportable as CSV
+- [ ] MFA enabled untuk admin (TOTP)
+- [ ] `/metrics` endpoint exposed (Prometheus)
+- [ ] Grafana dashboard: request rate, latency, error rate, DB connections
+- [ ] Runbook + incident response doc published
 - [ ] vitest ≥ 70% coverage business logic
 - [ ] Deploy ke server kantor, accessible via internal URL
+
+---
 
 ### Phase 2 — AI Co-pilot (Bulan 4-5)
 
 **Tujuan:** AI assist untuk drafting & review. BYO only.
 
-**Scope:**
+**Scope (functional):**
 - F-20 sampai F-29 (AI features)
 - 4 section dengan AI: executive summary, system description, risk, procedure
-- Per-user AI config (BYO key)
+- Per-user AI config (BYO key, multi-profile)
 - Multi-provider: OpenAI, Anthropic, custom URL (Together, Groq, Ollama, dll)
 - Streaming response
 - Token usage tracking per user (awareness, no billing)
 
-**Deliverable:** User bisa configure AI provider mereka sendiri, click "Generate" di section tertentu, AI draft real-time, user edit lalu save.
+**Scope (operational, from P1 gap analysis):**
+- **OpenTelemetry tracing**: HTTP → DB → AI (visible in Grafana Tempo)
+- **Conventional commits enforcement** strict (release-please integration)
+- **Accessibility audit** (axe-core in CI)
+
+**Deliverable:** User bisa configure AI provider mereka sendiri, click "Generate" di section tertentu, AI draft real-time, user edit lalu save. Plus full distributed tracing.
 
 **Definition of Done:**
 - [ ] Settings → AI Configurations UI
@@ -748,6 +851,11 @@ ai_configurations (id, tenant_id, name, provider, base_url, api_key_encrypted, d
 - [ ] Cost awareness widget di dashboard
 - [ ] Fallback: kalau AI fail, user bisa input manual
 - [ ] Encryption: API key AES-256-GCM at rest
+- [ ] OpenTelemetry traces visible di Grafana (request → DB → AI call)
+- [ ] axe-core accessibility check di CI (no critical violations)
+- [ ] release-please configured (auto CHANGELOG on merge to main)
+
+---
 
 ### Phase 3 — Collaboration (Bulan 6-7)
 
@@ -760,7 +868,14 @@ ai_configurations (id, tenant_id, name, provider, base_url, api_key_encrypted, d
 - Email + in-app notification
 - Yjs + Hocuspocus untuk real-time collab
 
-**Deliverable:** Tim bisa collaborate di DRP yang sama secara real-time, dengan comment thread.
+**Scope (operational, from P2 gap analysis):**
+- **SLO definition**: 99% availability, P95 < 1.5s
+- **Error budget tracking** dashboard
+- **Synthetic monitoring**: UptimeRobot (free tier) untuk external health check
+
+**Deliverable:** Tim bisa collaborate di DRP yang sama secara real-time, dengan comment thread. Plus SLO tracking.
+
+---
 
 ### Phase 4 — Enterprise (Bulan 8-10) — IF going commercial
 
@@ -776,22 +891,34 @@ ai_configurations (id, tenant_id, name, provider, base_url, api_key_encrypted, d
 - Auditor package export (ZIP: DRP + drill history + change log)
 - Webhook (CMDB change → DRP review notification)
 
-**Scope (only if commercial):**
-- SSO (Google, Microsoft)
-- Multi-tenant
-- Payment
-- PWA offline mode
-- White-label
+| **Scope (only if commercial):** |
+|- SSO (Google, Microsoft)
+|- Multi-tenant
+|- Payment
+|- PWA offline mode
+|- White-label
+|- **Pen test** (external, annual)
+|- **SOC 2 readiness** (jika SaaS path)
+|- **Chaos testing** (Chaos Mesh / Litmus)
 
 ### Phase 5 — Scale (Bulan 11-12+)
 
-**Only if commercial decision made. Otherwise stop di Phase 4 internal.**
+**Only relevant jika ada commercial decision atau user growth signifikan. Untuk internal-only use, stop di Phase 4.**
 
-- Multi-region, data residency per tenant
-- Mobile app
-- Template marketplace
+**Scope (jika ada demand):**
+- Multi-region deployment, data residency per tenant
+- Mobile app (PWA enhanced atau React Native)
+- Template marketplace (share template antar org)
 - Integration marketplace: ServiceNow, Jira, Datadog, PagerDuty
-- AI agent: proactive review (scheduled job, flag outdated)
+- AI agent: proactive review (scheduled job, flag outdated sections, suggest update)
+- Community features: forum, template voting, public roadmap
+
+**Definition of Done (jika executed):**
+- [ ] Multi-region deployment tested
+- [ ] PWA installable + offline mode working
+- [ ] Template marketplace MVP (upload, browse, rate)
+- [ ] 3+ integration connectors released
+- [ ] AI agent flags outdated sections dengan 90% accuracy
 
 ---
 

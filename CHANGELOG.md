@@ -13,12 +13,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - LICENSE: MIT (open source)
 - GitHub community files: CONTRIBUTING, CODE_OF_CONDUCT, SECURITY, issue & PR templates
 
-### Planned (Phase 0 — Foundation)
-- Monorepo structure (apps/web, apps/api, packages/shared)
-- Docker Compose (PostgreSQL, Redis, Fastify, Nginx)
-- Lucia Auth + local user
-- Health check endpoint
-- Backup script (daily pg_dump)
+### Changed
+- PRD section 10 (Roadmap): split Phase 0 into Phase 0a (Production Readiness P0 gaps) + Phase 0b (Foundation Infrastructure). Each subsequent phase (1-2-3) now includes operational items from gap analysis (MFA, runbook, metrics, OpenTelemetry, SLO).
+- Added quick reference table di section 10 dengan phase, period, focus, maturity target.
+- Re-added Phase 5 (Scale) yang ke-drop saat refactor.
+
+### Planned (Phase 0a — Production Readiness, ~2 weeks)
+- Open source boilerplate (✅ DONE)
+- Security baseline: Helmet, CSRF, rate limiting, password policy, Dependabot, CodeQL
+- Reliability baseline: RTO/RPO, backup script, backup monitoring, restore test, deep health check
+- Data integrity: Drizzle migrations, FK constraints, UU PDP endpoints, data retention
+- API standard: versioning, OpenAPI/Swagger, RFC 7807 errors, request ID
+- Threat model + runbook + onboarding guide
+
+### Planned (Phase 0b — Foundation, ~2 weeks)
+- Monorepo scaffolding
+- Docker Compose
+- DB connection pool
+- Error boundary
+- Lucia Auth
+- Conventional commits + husky
+- Container image to ghcr.io
 
 ## [0.0.0] - 2026-06-20
 
