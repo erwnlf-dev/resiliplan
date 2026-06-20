@@ -1,0 +1,5 @@
+-- ResiliPlan PostgreSQL init
+-- (Optional: extensions, schemas)
+-- Extensions can be added here if needed:
+-- CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+-- CREATE EXTENSION IF NOT EXISTS "pg_trgm";

@@ -1,0 +1,43 @@
+node_modules
+dist
+build
+coverage
+*.log
+.DS_Store
+.env
+.env.local
+.env.*.local
+
+# Workspace-specific
+apps/api/dist
+apps/web/dist
+packages/*/dist
+
+# Generated
+*.tsbuildinfo
+.turbo
+.pnpm-store
+
+# Editors
+.vscode/*
+!.vscode/extensions.json
+.idea
+*.swp
+
+# OS
+Thumbs.db
+
+# Test artifacts
+playwright-report/
+test-results/
+coverage/
+.nyc_output/
+
+# Docker
+docker-compose.override.yml
+
+# Build artifacts
+.next/
+.nuxt/
+.cache/
+.parcel-cache/

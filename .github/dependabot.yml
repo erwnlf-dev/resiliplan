@@ -1,0 +1,83 @@
+version: 2
+updates:
+  # npm dependencies (monorepo)
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "Asia/Jakarta"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "automated"
+    # Group minor + patch updates to reduce PR noise
+    groups:
+      npm-minor:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
+      npm-major:
+        patterns:
+          - "*"
+        update-types:
+          - "major"
+    # Commit message format
+    commit-message:
+      prefix: "chore"
+      prefix-development: "chore(dev)"
+    # Rebase strategy
+    rebase-strategy: "auto"
+    target-branch: "main"
+
+  # GitHub Actions
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "Asia/Jakarta"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "github-actions"
+      - "automated"
+    commit-message:
+      prefix: "ci"
+
+  # Docker base images (Phase 0b+ when Dockerfiles exist)
+  - package-ecosystem: "docker"
+    directory: "/docker"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "Asia/Jakarta"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "docker"
+      - "automated"
+    commit-message:
+      prefix: "chore(docker)"
+    # Ignore major version updates for base images (manual review)
+    ignore:
+      - dependency-name: "node"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "postgres"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "redis"
+        update-types: ["version-update:semver-major"]
+
+# Auto-merge for safe updates
+# (configured in repo settings, not in dependabot.yml)
+#
+# Recommended repo settings:
+# - Settings → General → Automatically delete head branches: ✅
+# - Settings → Code security and analysis → Dependabot alerts: ✅
+# - Settings → Code security and analysis → Dependabot security updates: ✅
+# - Settings → Code security and analysis → Dependabot version updates: ✅

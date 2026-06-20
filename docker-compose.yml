@@ -1,0 +1,145 @@
+version: '3.9'
+
+# ResiliPlan — Production Docker Compose
+# Full stack: Nginx + API + Web + PostgreSQL + Redis
+# Use this for self-hosted deployment.
+
+services:
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: resiliplan-nginx
+    restart: unless-stopped
+    ports:
+      - '80:80'
+      - '443:443'
+    volumes:
+      - ./docker/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./docker/nginx/conf.d:/etc/nginx/conf.d:ro
+      - /etc/letsencrypt:/etc/letsencrypt:ro
+      - /var/lib/resiliplan/exports:/var/lib/resiliplan/exports:ro
+    depends_on:
+      api:
+        condition: service_healthy
+      web:
+        condition: service_started
+    networks:
+      - resiliplan_net
+
+  api:
+    build:
+      context: ./apps/api
+      dockerfile: Dockerfile
+    container_name: resiliplan-api
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      API_PORT: 3001
+      DATABASE_URL: postgresql://resiliplan:${POSTGRES_PASSWORD}@postgres:5432/resiliplan
+      REDIS_URL: redis://redis:6379
+      API_KEY_ENCRYPTION_KEY: ${API_KEY_ENCRYPTION_KEY}
+      CORS_ORIGINS: ${CORS_ORIGINS}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      LOG_PRETTY: 'false'
+    volumes:
+      - /var/lib/resiliplan/exports:/var/lib/resiliplan/exports
+      - /var/log/resiliplan:/var/log/resiliplan
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ['CMD', 'wget', '--no-verbose', '--tries=1', '--spider', 'http://localhost:3001/api/health/live']
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    networks:
+      - resiliplan_net
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.5'
+        reservations:
+          memory: 128M
+    logging:
+      driver: 'json-file'
+      options:
+        max-size: '10m'
+        max-file: '3'
+
+  web:
+    build:
+      context: ./apps/web
+      dockerfile: Dockerfile
+      args:
+        VITE_API_URL: ${VITE_API_URL}
+    container_name: resiliplan-web
+    restart: unless-stopped
+    depends_on:
+      - api
+    networks:
+      - resiliplan_net
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: resiliplan-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: resiliplan
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: resiliplan
+      PGDATA: /var/lib/postgresql/data/pgdata
+    volumes:
+      - resiliplan_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U resiliplan -d resiliplan']
+      interval: 30s
+      timeout: 5s
+      retries: 5
+    networks:
+      - resiliplan_net
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: '1.0'
+
+  redis:
+    image: redis:7-alpine
+    container_name: resiliplan-redis
+    restart: unless-stopped
+    command: ['redis-server', '--appendonly', 'yes', '--requirepass', '${REDIS_PASSWORD}', '--maxmemory', '512mb', '--maxmemory-policy', 'allkeys-lru']
+    volumes:
+      - resiliplan_redisdata:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', '--no-auth-warning', '-a', '${REDIS_PASSWORD}', 'ping']
+      interval: 30s
+      timeout: 5s
+      retries: 5
+    networks:
+      - resiliplan_net
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.5'
+
+volumes:
+  resiliplan_pgdata:
+    name: resiliplan_pgdata
+  resiliplan_redisdata:
+    name: resiliplan_redisdata
+
+networks:
+  resiliplan_net:
+    name: resiliplan_net
+    driver: bridge
+
+# Usage:
+#   1. Copy .env.example to .env and fill in secrets
+#   2. Place TLS certs at /etc/letsencrypt/live/resiliplan.kantor.local/
+#   3. docker compose up -d
+#   4. Run migrations: docker compose exec api pnpm db:migrate
+#   5. Verify: curl https://resiliplan.kantor.local/api/health

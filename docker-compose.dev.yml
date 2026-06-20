@@ -1,0 +1,51 @@
+version: '3.9'
+
+# ResiliPlan — Development Docker Compose
+# Only starts infrastructure (PostgreSQL + Redis). API + Web run via pnpm dev.
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: resiliplan-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: resiliplan
+      POSTGRES_PASSWORD: resiliplan
+      POSTGRES_DB: resiliplan
+      PGDATA: /var/lib/postgresql/data/pgdata
+    ports:
+      - '5432:5432'
+    volumes:
+      - resiliplan_pgdata:/var/lib/postgresql/data
+      - ./docker/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U resiliplan -d resiliplan']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: resiliplan-redis
+    restart: unless-stopped
+    command: ['redis-server', '--appendonly', 'yes', '--maxmemory', '256mb', '--maxmemory-policy', 'allkeys-lru']
+    ports:
+      - '6379:6379'
+    volumes:
+      - resiliplan_redisdata:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  resiliplan_pgdata:
+    name: resiliplan_pgdata
+  resiliplan_redisdata:
+    name: resiliplan_redisdata
+
+# Usage:
+#   pnpm docker:up     # Start
+#   pnpm docker:down   # Stop
+#   pnpm docker:reset  # Stop + remove volumes (DESTRUCTIVE)

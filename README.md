@@ -1,140 +1,115 @@
 # ResiliPlan
 
 > **Disaster Recovery Plan Builder — ISO 22301-aligned, AI-assisted, self-hosted**
-> Free & open source · Self-host untuk kantor Anda sendiri
+> Monorepo untuk web app, API, dan shared types.
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE)
-[![Status: Planning](https://img.shields.io/badge/status-planning-yellow.svg)](./PRD.md)
-[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](./CONTRIBUTING.md)
-[![Security Policy](https://img.shields.io/badge/security-policy-brightgreen.svg)](./SECURITY.md)
-[![Code of Conduct](https://img.shields.io/badge/code%20of-conduct-ff69b4.svg)](./CODE_OF_CONDUCT.md)
-
-**ResiliPlan** adalah tool self-hosted untuk membangun, menguji, dan memelihara Disaster Recovery Plan (DRP) yang patuh terhadap **ISO 22301**. Dilengkapi dengan AI co-pilot (BYO API key) untuk mempercepat drafting procedure, BIA, dan compliance documentation.
-
-> **Tagline:** *From static document to living plan.*
-
-## ✨ Key Features
-
-- ✅ **ISO 22301-aligned template** (14 section dengan auto-mapping ke ISO 22301 clauses + NIST 800-34 + BCI GPG reference)
-- ✅ **AI Co-pilot per section** (BYO API key — OpenAI, Anthropic, custom URL, local LLM)
-- ✅ **Multi-user + role-based access** (Admin, Coordinator, Owner, Viewer)
-- ✅ **Version control + approval workflow + e-sign**
-- ✅ **Export PDF** (siap-audit) + **DOCX** (editable) + **Markdown** (git-friendly)
-- ✅ **Audit trail** (every change tracked, append-only, exportable)
-- ⏳ **DR drill scheduler** (planned Phase 4)
-- ⏳ **Risk register + asset registry** (planned Phase 4)
-- ⏳ **Real-time collaboration** (planned Phase 3)
-
-## 🎯 Use Case
-
-**Ideal untuk:**
-- IT Service Manager / DR Coordinator yang manage BCP/DRP internal
-- Compliance team yang perlu ISO 22301-compliant DRP documentation
-- Tim IT yang ingin automate DRP drafting (AI-assisted)
-- Organisasi yang butuh self-hosted tool (data privacy, compliance)
-- Auditor yang perlu versioned, traceable, evidence-based DRP
-
-**Bukan untuk:**
-- Organisasi yang butuh managed SaaS (we don't provide hosting)
-- Real-time incident management (ini planning tool, bukan incident response tool)
-
-## 🚀 Quick Start
-
-_(Coming soon — Phase 0 implementation)_
+## Quick Start
 
 ```bash
-# Clone
-git clone https://github.com/datacomm-diangraha/resiliplan.git
-cd resiliplan
+# Install dependencies (uses pnpm workspaces)
+pnpm install
 
-# Start
-docker compose up -d
+# Start infrastructure (PostgreSQL + Redis)
+pnpm docker:up
 
-# Open
-open http://localhost:5173
+# Copy environment file
+cp .env.example .env
+# Edit .env with your secrets
+
+# Run database migrations
+pnpm db:migrate
+
+# Start dev servers (web + api, parallel)
+pnpm dev
 ```
 
-Lihat [`docs/architecture.md`](./docs/architecture.md) untuk tech detail.
+**Open:**
+- Web: http://localhost:5173
+- API: http://localhost:3001
+- API docs: http://localhost:3001/api/docs
+- Health: http://localhost:3001/api/health
+- Database UI (Drizzle Studio): `pnpm db:studio`
 
-## 📖 Documentation
+## Workspace Structure
 
-| Document | Deskripsi |
+```
+resiliplan/
+├── apps/
+│   ├── web/              # Vite + React + TypeScript frontend
+│   ├── api/              # Fastify + TypeScript backend
+│   └── worker/           # (Phase 2+) BullMQ worker
+├── packages/
+│   └── shared/           # Shared types, constants, utilities
+├── docs/                 # Documentation (PRD, architecture, etc)
+├── scripts/              # Operational scripts (backup, restore test)
+├── .github/              # GitHub workflows + templates
+└── docker-compose*.yml   # Docker Compose files
+```
+
+## Documentation
+
+| Doc | Description |
 |---|---|
-| [PRD.md](./PRD.md) | Master product requirements (956 lines) |
-| [docs/architecture.md](./docs/architecture.md) | Technical architecture detail (528 lines) |
-| [docs/ai-integration.md](./docs/ai-integration.md) | AI provider layer + prompt templates (591 lines) |
-| [docs/gap-analysis.md](./docs/gap-analysis.md) | Production readiness gap analysis (29KB) |
+| [PRD.md](./PRD.md) | Master product requirements |
 | [CONTRIBUTING.md](./CONTRIBUTING.md) | How to contribute |
-| [SECURITY.md](./SECURITY.md) | Vulnerability disclosure policy |
-| [CHANGELOG.md](./CHANGELOG.md) | Release history |
+| [docs/architecture.md](./docs/architecture.md) | Tech architecture detail |
+| [docs/ai-integration.md](./docs/ai-integration.md) | AI layer design |
+| [docs/data-model.md](./docs/data-model.md) | Drizzle schema detail |
+| [docs/ui-design.md](./docs/ui-design.md) | Design system + screens |
+| [docs/dr-plan.md](./docs/dr-plan.md) | Our own DR plan |
+| [docs/threat-model.md](./docs/threat-model.md) | STRIDE analysis |
+| [docs/runbook.md](./docs/runbook.md) | Common incident response |
+| [docs/gap-analysis.md](./docs/gap-analysis.md) | Production readiness assessment |
+| [docs/phase-0a-checklist.md](./docs/phase-0a-checklist.md) | Phase 0a DoD |
 
-## 🛣️ Roadmap
+## Common Commands
 
-| Phase | Status | Scope |
-|---|---|---|
-| **0 — Foundation** | ⏳ Planning | Monorepo, Docker Compose, auth, health check, backup |
-| **1 — Core DRP** | ⏳ Planning | ISO 22301 template, 14 section editor, approval, export |
-| **2 — AI Co-pilot** | ⏳ Planning | BYO multi-provider AI, streaming, 4 section assist |
-| **3 — Collaboration** | ⏳ Future | Comments, real-time edit, notifications |
-| **4 — Enterprise** | ⏳ Future | Drill scheduler, risk register, asset registry |
+```bash
+# Development
+pnpm dev                    # All workspaces in parallel
+pnpm dev:api                # API only
+pnpm dev:web                # Web only
 
-Lihat [PRD section 10](./PRD.md#10-implementation-roadmap) untuk detail.
+# Build
+pnpm build                  # All workspaces
 
-## 🛠️ Tech Stack
+# Test
+pnpm test                   # All tests
+pnpm test:coverage          # With coverage
+pnpm test:watch             # Watch mode
 
-**Frontend:** Vite + React 18 + TypeScript + Tailwind CSS + shadcn/ui
-**Backend:** Fastify + TypeScript
-**Database:** PostgreSQL 16
-**AI:** Vercel AI SDK (OpenAI / Anthropic / custom URL)
-**Job Queue:** BullMQ + Redis 7
-**Auth:** Lucia Auth
-**Deployment:** Docker Compose (self-hosted)
+# Lint & Format
+pnpm lint                   # ESLint all
+pnpm lint:fix               # Auto-fix
+pnpm format                 # Prettier write
+pnpm format:check           # Prettier check
 
-Lihat [docs/architecture.md](./docs/architecture.md) untuk full package list.
+# Database
+pnpm db:generate            # Generate migration from schema
+pnpm db:migrate             # Apply migrations
+pnpm db:push                # Push schema directly (dev only)
+pnpm db:studio              # Open Drizzle Studio
+pnpm db:seed                # Seed dev data
 
-## 🔒 Security & Privacy
+# Docker
+pnpm docker:up              # Start infrastructure
+pnpm docker:down            # Stop infrastructure
+pnpm docker:logs            # Tail logs
+pnpm docker:reset           # Reset (DESTRUCTIVE: drops all data)
+```
 
-- **Self-hosted** = data tidak pernah keluar server Anda (kecuali ke AI provider yang Anda configure)
-- **BYO AI key** = Anda kontrol penuh model, cost, dan data policy AI
-- **API key encryption** = AES-256-GCM at rest
-- **Audit log** = immutable, append-only, exportable
-- **RBAC** = 4-role permission system
+## Tech Stack
 
-Lihat [SECURITY.md](./SECURITY.md) untuk vulnerability disclosure + best practices.
+- **Frontend:** Vite + React 18 + TypeScript + Tailwind CSS + shadcn/ui
+- **Backend:** Fastify + TypeScript + Drizzle ORM
+- **Database:** PostgreSQL 16
+- **Cache/Jobs:** Redis 7 + BullMQ
+- **AI:** Vercel AI SDK (OpenAI, Anthropic, custom URL)
+- **Auth:** Lucia Auth
+- **Validation:** Zod
+- **Testing:** Vitest
+- **Deployment:** Docker Compose (self-hosted)
 
-## 🤝 Contributing
+## License
 
-Contributions welcome! 🎉
-
-- 🐛 [Report a bug](https://github.com/datacomm-diangraha/resiliplan/issues/new?template=bug_report.md)
-- 💡 [Request a feature](https://github.com/datacomm-diangraha/resiliplan/issues/new?template=feature_request.md)
-- ❓ [Ask a question](https://github.com/datacomm-diangraha/resiliplan/issues/new?template=question.md)
-- 🔧 [Submit a PR](./CONTRIBUTING.md)
-- 🌍 [Translate](./CONTRIBUTING.md#-translate)
-
-Baca [CONTRIBUTING.md](./CONTRIBUTING.md) untuk development setup.
-
-## 📄 License
-
-[MIT](./LICENSE) — free untuk use, modify, distribute, commercial use.
-
-Copyright (c) 2026 PT Datacomm Diangraha
-
-## 👤 Author & Maintainer
-
-**Erwin Alifiansyah** · IT Service Resilience · PT Datacomm Diangraha
-
-Dibuat sebagai internal tool, dishare sebagai open source untuk benefit komunitas IT resilience Indonesia & global.
-
-## 🙏 Acknowledgments
-
-- **Standards:** ISO 22301, NIST SP 800-34, BCI GPG
-- **AI:** Vercel AI SDK, OpenAI, Anthropic
-- **Open source libraries:** lihat [package.json](./apps/web/package.json) dan [apps/api/package.json](./apps/api/package.json)
-- **Inspiration:** Linear, Notion, Vercel (UI/UX), Nextcloud, GitLab (open source governance)
-
----
-
-⭐ **Star this repo** if ResiliPlan helps your DR/BCP work!
-
-📢 **Share with your team** if your organization needs ISO 22301-aligned DRP tooling.
+[MIT](./LICENSE) — Open source

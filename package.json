@@ -1,0 +1,64 @@
+{
+  "name": "resiliplan",
+  "version": "0.1.0",
+  "description": "Disaster Recovery Plan Builder — ISO 22301-aligned, AI-assisted, self-hosted",
+  "private": true,
+  "license": "MIT",
+  "author": "Erwin Alifiansyah <[email protected]>",
+  "homepage": "https://github.com/datacomm-diangraha/resiliplan",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/datacomm-diangraha/resiliplan.git"
+  },
+  "bugs": {
+    "url": "https://github.com/datacomm-diangraha/resiliplan/issues"
+  },
+  "engines": {
+    "node": ">=20.0.0",
+    "pnpm": ">=9.0.0"
+  },
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "pnpm -r --parallel run dev",
+    "dev:api": "pnpm --filter @resiliplan/api run dev",
+    "dev:web": "pnpm --filter @resiliplan/web run dev",
+    "build": "pnpm -r run build",
+    "lint": "pnpm -r run lint",
+    "lint:fix": "pnpm -r run lint:fix",
+    "typecheck": "pnpm -r run typecheck",
+    "test": "pnpm -r run test",
+    "test:coverage": "pnpm -r run test:coverage",
+    "test:watch": "pnpm -r --parallel run test:watch",
+    "db:generate": "pnpm --filter @resiliplan/api run db:generate",
+    "db:migrate": "pnpm --filter @resiliplan/api run db:migrate",
+    "db:push": "pnpm --filter @resiliplan/api run db:push",
+    "db:studio": "pnpm --filter @resiliplan/api run db:studio",
+    "db:seed": "pnpm --filter @resiliplan/api run db:seed",
+    "docker:up": "docker compose -f docker-compose.dev.yml up -d",
+    "docker:down": "docker compose -f docker-compose.dev.yml down",
+    "docker:logs": "docker compose -f docker-compose.dev.yml logs -f",
+    "docker:reset": "docker compose -f docker-compose.dev.yml down -v && docker compose -f docker-compose.dev.yml up -d",
+    "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md,yml,yaml}\"",
+    "format:check": "prettier --check \"**/*.{ts,tsx,js,jsx,json,md,yml,yaml}\"",
+    "prepare": "husky || true"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "husky": "^9.1.0",
+    "lint-staged": "^15.2.0",
+    "prettier": "^3.3.0",
+    "typescript": "^5.5.0"
+  },
+  "lint-staged": {
+    "*.{ts,tsx,js,jsx}": [
+      "eslint --fix",
+      "prettier --write"
+    ],
+    "*.{json,md,yml,yaml}": [
+      "prettier --write"
+    ]
+  }
+}
