@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, Route, Routes, useNavigate, useParams } from 'react-router-dom';
 import { AlertTriangle, Calendar, CheckCircle2, Download, FileText, Home, Lock, LogOut, Save, Send, Server } from 'lucide-react';
 
-type User = { id: string; email: string; name: string; role: 'admin' | 'coordinator' | 'owner' | 'viewer' };
+type User = { id: string; email: string; name: string; role: 'admin' | 'coordinator' | 'owner' | 'viewer'; mfaEnabled: boolean };
 type Section = { id: string; sectionKey: string; title: string; isoClause: string; order: number; contentMarkdown: string; status: string };
 type Plan = {
   id: string;
@@ -31,7 +31,8 @@ function cookieValue(name: string): string | undefined {
 
 async function api<T>(path: string, options: RequestInit = {}): Promise<T> {
   const method = (options.method ?? 'GET').toUpperCase();
-  const headers: Record<string, string> = { 'Content-Type': 'application/json', ...(options.headers as Record<string, string> | undefined) };
+  const headers: Record<string, string> = { ...(options.headers as Record<string, string> | undefined) };
+  if (options.body !== undefined && !(options.body instanceof FormData)) headers['Content-Type'] = headers['Content-Type'] ?? 'application/json';
   if (!['GET', 'HEAD', 'OPTIONS'].includes(method)) {
     const csrf = cookieValue('resiliplan_csrf');
     if (csrf) headers['X-CSRF-Token'] = decodeURIComponent(csrf);
@@ -62,10 +63,10 @@ export function App() {
   if (authLoading) return <Centered>Loading ResiliPlan...</Centered>;
   if (!user) return <LoginPage onLogin={setUser} />;
 
-  return <Shell user={user} onLogout={() => setUser(null)} />;
+  return <Shell user={user} onUserUpdate={setUser} onLogout={() => setUser(null)} />;
 }
 
-function Shell({ user, onLogout }: { user: User; onLogout: () => void }) {
+function Shell({ user, onUserUpdate, onLogout }: { user: User; onUserUpdate: (user: User) => void; onLogout: () => void }) {
   async function logout() {
     await api('/api/v1/auth/logout', { method: 'POST' });
     onLogout();
@@ -93,6 +94,7 @@ function Shell({ user, onLogout }: { user: User; onLogout: () => void }) {
           <NavLink to="/assets" icon={<Server className="h-4 w-4" />}>Assets</NavLink>
           <NavLink to="/risks" icon={<AlertTriangle className="h-4 w-4" />}>Risks</NavLink>
           <NavLink to="/drills" icon={<Calendar className="h-4 w-4" />}>Drills</NavLink>
+          <NavLink to="/security" icon={<Lock className="h-4 w-4" />}>Security</NavLink>
         </nav></aside>
         <main className="flex-1"><Routes>
           <Route path="/" element={<Dashboard />} />
@@ -101,6 +103,7 @@ function Shell({ user, onLogout }: { user: User; onLogout: () => void }) {
           <Route path="/assets" element={<PlaceholderPage title="Assets" note="Phase 4 scope: CMDB/asset registry. Current Phase 1 focuses on linked service metadata." />} />
           <Route path="/risks" element={<PlaceholderPage title="Risks" note="Risk register is represented inside ISO section 7 for Phase 1; full register lands in Phase 4." />} />
           <Route path="/drills" element={<PlaceholderPage title="Drills" note="Drill scheduler lands in Phase 4. Phase 1 exports audit-ready DRP documents." />} />
+          <Route path="/security" element={<SecurityPage user={user} onUserUpdate={onUserUpdate} />} />
           <Route path="*" element={<NotFound />} />
         </Routes></main>
       </div>
@@ -111,6 +114,7 @@ function Shell({ user, onLogout }: { user: User; onLogout: () => void }) {
 function LoginPage({ onLogin }: { onLogin: (user: User) => void }) {
   const [email, setEmail] = useState('admin@resiliplan.local');
   const [password, setPassword] = useState('');
+  const [totp, setTotp] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -118,7 +122,7 @@ function LoginPage({ onLogin }: { onLogin: (user: User) => void }) {
     event.preventDefault();
     setLoading(true); setError('');
     try {
-      const result = await api<{ user: User }>('/api/v1/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) });
+      const result = await api<{ user: User }>('/api/v1/auth/login', { method: 'POST', body: JSON.stringify({ email, password, totp: totp || undefined }) });
       onLogin(result.user);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Login failed');
@@ -129,7 +133,8 @@ function LoginPage({ onLogin }: { onLogin: (user: User) => void }) {
     <div className="mb-6 flex items-center gap-2"><div className="rounded-lg bg-primary p-2 text-white"><Lock className="h-5 w-5" /></div><div><h1 className="text-xl font-semibold">Login ResiliPlan</h1><p className="text-sm text-muted-foreground">Core DRP workspace</p></div></div>
     {error && <div className="mb-4 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div>}
     <label className="text-sm font-medium">Email</label><input value={email} onChange={(e) => setEmail(e.target.value)} className="mb-4 mt-1 w-full rounded-md border px-3 py-2" />
-    <label className="text-sm font-medium">Password</label><input value={password} onChange={(e) => setPassword(e.target.value)} type="password" className="mb-6 mt-1 w-full rounded-md border px-3 py-2" />
+    <label className="text-sm font-medium">Password</label><input value={password} onChange={(e) => setPassword(e.target.value)} type="password" className="mb-4 mt-1 w-full rounded-md border px-3 py-2" />
+    <label className="text-sm font-medium">TOTP code <span className="text-muted-foreground">(if MFA enabled)</span></label><input value={totp} onChange={(e) => setTotp(e.target.value)} inputMode="numeric" className="mb-6 mt-1 w-full rounded-md border px-3 py-2" />
     <button disabled={loading} className="w-full rounded-md bg-primary px-4 py-2 font-medium text-white disabled:opacity-50">{loading ? 'Signing in...' : 'Sign in'}</button>
   </form></div>;
 }
@@ -220,6 +225,43 @@ function PlanEditor() {
     <div className="grid gap-4 lg:grid-cols-[280px_1fr]"><aside className="rounded-lg border bg-card p-3"><div className="mb-2 text-sm font-medium">14 ISO 22301 Sections</div><div className="space-y-1">{plan.sections?.map((s) => <button key={s.id} onClick={() => setSelected(s.sectionKey)} className={`w-full rounded-md px-3 py-2 text-left text-sm ${s.sectionKey === selected ? 'bg-primary text-white' : 'hover:bg-muted'}`}><div className="font-medium">{s.order}. {s.title.replace(/^\d+\. /, '')}</div><div className="text-xs opacity-75">{s.isoClause}</div></button>)}</div></aside>
       <section className="rounded-lg border bg-card"><div className="flex items-center justify-between border-b p-4"><div><h2 className="font-semibold">{section?.title}</h2><p className="text-xs text-muted-foreground">Compliance badge: {section?.isoClause}</p></div><button onClick={saveSection} className="inline-flex items-center gap-1 rounded-md bg-primary px-3 py-2 text-sm text-white"><Save className="h-4 w-4" /> Save</button></div><textarea value={draft} onChange={(e) => setDraft(e.target.value)} className="h-[520px] w-full resize-none p-4 font-mono text-sm outline-none" /></section></div>
     <div className="flex flex-wrap gap-2"><DownloadLink href={`/api/v1/plans/${plan.id}/export/markdown`} label="Markdown" /><DownloadLink href={`/api/v1/plans/${plan.id}/export/pdf`} label="PDF" /><DownloadLink href={`/api/v1/plans/${plan.id}/export/docx`} label="DOCX" /><DownloadLink href={`/api/v1/plans/${plan.id}/audit.csv`} label="Audit CSV" /></div>
+  </div>;
+}
+
+function SecurityPage({ user, onUserUpdate }: { user: User; onUserUpdate: (user: User) => void }) {
+  const [secret, setSecret] = useState('');
+  const [otpauthUrl, setOtpauthUrl] = useState('');
+  const [token, setToken] = useState('');
+  const [message, setMessage] = useState('');
+  const [error, setError] = useState('');
+
+  async function setupMfa() {
+    setError(''); setMessage('');
+    try {
+      const data = await api<{ secret: string; otpauthUrl: string }>('/api/v1/auth/mfa/setup', { method: 'POST' });
+      setSecret(data.secret);
+      setOtpauthUrl(data.otpauthUrl);
+      setMessage('Secret generated. Add it to your authenticator app, then verify the 6-digit code.');
+    } catch (err) { setError(err instanceof Error ? err.message : 'Failed to setup MFA'); }
+  }
+
+  async function verifyMfa() {
+    setError(''); setMessage('');
+    try {
+      await api('/api/v1/auth/mfa/verify', { method: 'POST', body: JSON.stringify({ token }) });
+      onUserUpdate({ ...user, mfaEnabled: true });
+      setMessage('MFA enabled for this admin account. Next login requires TOTP token.');
+    } catch (err) { setError(err instanceof Error ? err.message : 'Failed to verify MFA'); }
+  }
+
+  return <div className="space-y-6"><div><h1 className="text-2xl font-bold">Security Settings</h1><p className="text-sm text-muted-foreground">Admin MFA hardening for Phase 1.</p></div>
+    {error && <ErrorBox message={error} />}
+    {message && <div className="rounded-md border border-green-200 bg-green-50 p-3 text-sm text-green-700">{message}</div>}
+    <div className="rounded-lg border bg-card p-6"><div className="flex items-center justify-between"><div><h2 className="font-semibold">Multi-factor authentication</h2><p className="text-sm text-muted-foreground">Status: {user.mfaEnabled ? 'enabled' : 'not enabled'}</p></div><StatusBadge status={user.mfaEnabled ? 'approved' : 'draft'} /></div>
+      <div className="mt-5 space-y-4"><button onClick={setupMfa} className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-white">Generate MFA secret</button>
+        {secret && <div className="rounded-md border bg-muted/40 p-4"><p className="text-sm font-medium">Manual secret</p><code className="mt-2 block break-all rounded bg-white p-2 text-xs">{secret}</code><p className="mt-3 text-sm font-medium">OTP Auth URL</p><code className="mt-2 block break-all rounded bg-white p-2 text-xs">{otpauthUrl}</code><div className="mt-4 flex gap-2"><input value={token} onChange={(e) => setToken(e.target.value)} placeholder="6-digit code" className="w-40 rounded-md border px-3 py-2" /><button onClick={verifyMfa} className="rounded-md bg-green-600 px-4 py-2 text-sm font-medium text-white">Verify & Enable</button></div></div>}
+      </div>
+    </div>
   </div>;
 }
 

@@ -36,7 +36,7 @@ export async function authRoutes(app: FastifyInstance) {
     const session = await createSession(user.id);
     await db.update(users).set({ lastLoginAt: new Date(), lastLoginIp: req.ip }).where(eq(users.id, user.id));
     reply.header('Set-Cookie', cookieHeader(sessionCookieName(), session.id, session.expiresAt));
-    return { user: { id: user.id, tenantId: user.tenantId, email: user.email, name: user.name, role: user.role } };
+    return { user: { id: user.id, tenantId: user.tenantId, email: user.email, name: user.name, role: user.role, mfaEnabled: user.mfaEnabled } };
   });
 
   app.post('/api/v1/auth/logout', async (req, reply) => {

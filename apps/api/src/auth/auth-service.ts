@@ -7,7 +7,7 @@ import { sessions, users, type User } from '../db/schema/index.js';
 const SESSION_COOKIE = 'resiliplan_session';
 const SESSION_TTL_MS = 1000 * 60 * 60 * 12;
 
-export type AuthUser = Pick<User, 'id' | 'tenantId' | 'email' | 'name' | 'role'>;
+export type AuthUser = Pick<User, 'id' | 'tenantId' | 'email' | 'name' | 'role' | 'mfaEnabled'>;
 
 export function sessionCookieName() {
   return SESSION_COOKIE;
@@ -69,6 +69,7 @@ export async function getAuthUser(req: FastifyRequest): Promise<AuthUser | null>
       email: users.email,
       name: users.name,
       role: users.role,
+      mfaEnabled: users.mfaEnabled,
       disabled: users.disabled,
     })
     .from(sessions)
@@ -76,7 +77,8 @@ export async function getAuthUser(req: FastifyRequest): Promise<AuthUser | null>
     .where(and(eq(sessions.id, sessionId), gt(sessions.expiresAt, new Date())))
     .limit(1);
   if (!row || row.disabled) return null;
-  return row;
+  const { disabled: _disabled, ...authUser } = row;
+  return authUser;
 }
 
 export async function requireAuth(req: FastifyRequest): Promise<AuthUser> {
