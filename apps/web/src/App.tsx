@@ -17,6 +17,11 @@ type Plan = {
   sections?: Section[];
 };
 
+type ServiceAsset = { id: string; serviceName: string; assetName: string; assetType: string; owner: string; criticality: string; recoveryPriority: number; dependencies: string[]; notes: string };
+type ServiceRisk = { id: string; serviceName: string; riskTitle: string; category: string; probability: number; impact: number; riskScore: number; mitigation: string; owner: string; status: string };
+type RecoveryDrill = { id: string; serviceName: string; drillTitle: string; scheduledAt: string; scope: string; owner: string; status: string; resultSummary: string };
+type ResilienceSummary = { totalAssets: number; criticalAssets: number; priorityRecoveryAssets: number; openRisks: number; highRisks: number; plannedDrills: number; completedDrills: number };
+
 const API = import.meta.env.VITE_API_URL ?? `${window.location.protocol}//${window.location.hostname}:3001`;
 
 function cookieValue(name: string): string | undefined {
@@ -100,9 +105,9 @@ function Shell({ user, onUserUpdate, onLogout }: { user: User; onUserUpdate: (us
           <Route path="/" element={<Dashboard />} />
           <Route path="/plans" element={<PlansPage />} />
           <Route path="/plans/:id" element={<PlanEditor />} />
-          <Route path="/assets" element={<PlaceholderPage title="Assets" note="Phase 4 scope: CMDB/asset registry. Current Phase 1 focuses on linked service metadata." />} />
-          <Route path="/risks" element={<PlaceholderPage title="Risks" note="Risk register is represented inside ISO section 7 for Phase 1; full register lands in Phase 4." />} />
-          <Route path="/drills" element={<PlaceholderPage title="Drills" note="Drill scheduler lands in Phase 4. Phase 1 exports audit-ready DRP documents." />} />
+          <Route path="/assets" element={<AssetsPage />} />
+          <Route path="/risks" element={<RisksPage />} />
+          <Route path="/drills" element={<DrillsPage />} />
           <Route path="/security" element={<SecurityPage user={user} onUserUpdate={onUserUpdate} />} />
           <Route path="*" element={<NotFound />} />
         </Routes></main>
@@ -265,9 +270,68 @@ function SecurityPage({ user, onUserUpdate }: { user: User; onUserUpdate: (user:
   </div>;
 }
 
+function AssetsPage() {
+  const [assets, setAssets] = useState<ServiceAsset[]>([]);
+  const [error, setError] = useState('');
+  async function load() { try { setAssets((await api<{ assets: ServiceAsset[] }>('/api/v1/assets')).assets); } catch (err) { setError(err instanceof Error ? err.message : 'Failed to load assets'); } }
+  useEffect(() => { void load(); }, []);
+  async function submit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault(); setError('');
+    const data = new FormData(event.currentTarget);
+    try {
+      await api<ServiceAsset>('/api/v1/assets', { method: 'POST', body: JSON.stringify({ serviceName: data.get('serviceName'), assetName: data.get('assetName'), assetType: data.get('assetType'), owner: data.get('owner'), criticality: data.get('criticality'), recoveryPriority: Number(data.get('recoveryPriority')), dependencies: String(data.get('dependencies') ?? '').split(',').map((item) => item.trim()).filter(Boolean), notes: data.get('notes') }) });
+      event.currentTarget.reset(); await load();
+    } catch (err) { setError(err instanceof Error ? err.message : 'Create asset failed'); }
+  }
+  return <RegisterPage title="Assets" subtitle="Service dependency and recovery-priority register." error={error}><form onSubmit={submit} className="grid gap-3 rounded-lg border bg-card p-4 md:grid-cols-3"><Input name="serviceName" label="Service" required /><Input name="assetName" label="Asset name" required /><Input name="assetType" label="Asset type" placeholder="database / vm / network" required /><Input name="owner" label="Owner" required /><Input name="recoveryPriority" label="Recovery priority" type="number" min="1" max="5" defaultValue="3" required /><label className="text-sm font-medium">Criticality<select name="criticality" defaultValue="high" className="mt-1 w-full rounded-md border px-3 py-2"><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option><option value="critical">Critical</option></select></label><Input name="dependencies" label="Dependencies" placeholder="comma separated" /><label className="text-sm font-medium md:col-span-2">Notes<textarea name="notes" className="mt-1 h-20 w-full rounded-md border px-3 py-2" /></label><div className="md:col-span-3"><button className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-white">Add asset</button></div></form><SimpleTable headers={['Service','Asset','Type','Owner','Priority','Criticality']} rows={assets.map((asset) => [asset.serviceName, asset.assetName, asset.assetType, asset.owner, String(asset.recoveryPriority), asset.criticality])} empty="No assets registered." /></RegisterPage>;
+}
+
+function RisksPage() {
+  const [risks, setRisks] = useState<ServiceRisk[]>([]);
+  const [error, setError] = useState('');
+  async function load() { try { setRisks((await api<{ risks: ServiceRisk[] }>('/api/v1/risks')).risks); } catch (err) { setError(err instanceof Error ? err.message : 'Failed to load risks'); } }
+  useEffect(() => { void load(); }, []);
+  async function submit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault(); setError('');
+    const data = new FormData(event.currentTarget);
+    try {
+      await api<ServiceRisk>('/api/v1/risks', { method: 'POST', body: JSON.stringify({ serviceName: data.get('serviceName'), riskTitle: data.get('riskTitle'), category: data.get('category'), probability: Number(data.get('probability')), impact: Number(data.get('impact')), owner: data.get('owner'), mitigation: data.get('mitigation') }) });
+      event.currentTarget.reset(); await load();
+    } catch (err) { setError(err instanceof Error ? err.message : 'Create risk failed'); }
+  }
+  return <RegisterPage title="Risks" subtitle="Probability × impact risk register tied to DR readiness." error={error}><form onSubmit={submit} className="grid gap-3 rounded-lg border bg-card p-4 md:grid-cols-3"><Input name="serviceName" label="Service" required /><Input name="riskTitle" label="Risk title" required /><Input name="category" label="Category" required /><Input name="probability" label="Probability 1-5" type="number" min="1" max="5" defaultValue="3" required /><Input name="impact" label="Impact 1-5" type="number" min="1" max="5" defaultValue="4" required /><Input name="owner" label="Owner" /><label className="text-sm font-medium md:col-span-3">Mitigation<textarea name="mitigation" className="mt-1 h-20 w-full rounded-md border px-3 py-2" /></label><div className="md:col-span-3"><button className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-white">Add risk</button></div></form><SimpleTable headers={['Service','Risk','Category','Score','Owner','Status']} rows={risks.map((risk) => [risk.serviceName, risk.riskTitle, risk.category, String(risk.riskScore), risk.owner || '-', risk.status])} empty="No risks registered." /></RegisterPage>;
+}
+
+function DrillsPage() {
+  const [drills, setDrills] = useState<RecoveryDrill[]>([]);
+  const [error, setError] = useState('');
+  async function load() { try { setDrills((await api<{ drills: RecoveryDrill[] }>('/api/v1/drills')).drills); } catch (err) { setError(err instanceof Error ? err.message : 'Failed to load drills'); } }
+  useEffect(() => { void load(); }, []);
+  async function submit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault(); setError('');
+    const data = new FormData(event.currentTarget);
+    try {
+      await api<RecoveryDrill>('/api/v1/drills', { method: 'POST', body: JSON.stringify({ serviceName: data.get('serviceName'), drillTitle: data.get('drillTitle'), scheduledAt: new Date(String(data.get('scheduledAt'))).toISOString(), scope: data.get('scope'), owner: data.get('owner') }) });
+      event.currentTarget.reset(); await load();
+    } catch (err) { setError(err instanceof Error ? err.message : 'Create drill failed'); }
+  }
+  return <RegisterPage title="Drills" subtitle="Recovery exercise calendar and result tracking." error={error}><form onSubmit={submit} className="grid gap-3 rounded-lg border bg-card p-4 md:grid-cols-2"><Input name="serviceName" label="Service" required /><Input name="drillTitle" label="Drill title" required /><Input name="scheduledAt" label="Schedule" type="datetime-local" required /><Input name="owner" label="Owner" required /><label className="text-sm font-medium md:col-span-2">Scope<textarea name="scope" className="mt-1 h-20 w-full rounded-md border px-3 py-2" required /></label><div className="md:col-span-2"><button className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-white">Schedule drill</button></div></form><SimpleTable headers={['Service','Drill','Schedule','Owner','Status']} rows={drills.map((drill) => [drill.serviceName, drill.drillTitle, new Date(drill.scheduledAt).toLocaleString(), drill.owner, drill.status])} empty="No drills scheduled." /></RegisterPage>;
+}
+
+function RegisterPage({ title, subtitle, error, children }: { title: string; subtitle: string; error: string; children: React.ReactNode }) { return <div className="space-y-6"><div><h1 className="text-2xl font-bold">{title}</h1><p className="text-sm text-muted-foreground">{subtitle}</p></div>{error && <ErrorBox message={error} />}{children}</div>; }
+function SimpleTable({ headers, rows, empty }: { headers: string[]; rows: string[][]; empty: string }) { return <div className="overflow-hidden rounded-lg border bg-card"><div className="grid border-b bg-muted/40 p-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground" style={{ gridTemplateColumns: `repeat(${headers.length}, minmax(0, 1fr))` }}>{headers.map((header) => <div key={header}>{header}</div>)}</div>{rows.length === 0 ? <div className="p-6 text-center text-sm text-muted-foreground">{empty}</div> : rows.map((row, index) => <div key={index} className="grid border-b p-3 text-sm last:border-0" style={{ gridTemplateColumns: `repeat(${headers.length}, minmax(0, 1fr))` }}>{row.map((cell, cellIndex) => <div key={cellIndex} className="truncate pr-3">{cell}</div>)}</div>)}</div>; }
+
 function DownloadLink({ href, label }: { href: string; label: string }) { return <a href={`${API}${href}`} className="inline-flex items-center gap-1 rounded-md border px-3 py-2 text-sm"><Download className="h-4 w-4" /> Export {label}</a>; }
 function NavLink({ to, icon, children }: { to: string; icon: React.ReactNode; children: React.ReactNode }) { return <Link to={to} className="flex items-center gap-2 rounded-md px-3 py-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground">{icon}<span>{children}</span></Link>; }
-function Dashboard() { const [plans, setPlans] = useState<Plan[]>([]); useEffect(() => { api<{ plans: Plan[] }>('/api/v1/plans').then((d) => setPlans(d.plans)).catch(() => setPlans([])); }, []); return <div className="space-y-6"><div><h1 className="text-2xl font-bold">Dashboard</h1><p className="text-sm text-muted-foreground">Disaster recovery posture overview</p></div><div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4"><KpiCard label="Total DRP" value={`${plans.length}`} hint="Total plans" /><KpiCard label="Approved" value={`${plans.filter((p) => p.status === 'approved').length}`} hint="Ready for incident" /><KpiCard label="In Review" value={`${plans.filter((p) => p.status === 'in_review').length}`} hint="Awaiting sign-off" /><KpiCard label="Coverage" value={plans.length ? `${Math.round((plans.filter((p) => p.status === 'approved').length / plans.length) * 100)}%` : '0%'} hint="Approved / total" /></div><div className="rounded-lg border border-border bg-card p-6"><h2 className="mb-2 text-lg font-semibold">Phase 1 workspace aktif</h2><p className="text-sm text-muted-foreground">Buat DRP ISO 22301, edit 14 section, submit approval, sign, audit, dan export.</p></div></div>; }
+function Dashboard() {
+  const [plans, setPlans] = useState<Plan[]>([]);
+  const [summary, setSummary] = useState<ResilienceSummary | null>(null);
+  useEffect(() => {
+    api<{ plans: Plan[] }>('/api/v1/plans').then((d) => setPlans(d.plans)).catch(() => setPlans([]));
+    api<{ summary: ResilienceSummary }>('/api/v1/resilience/summary').then((d) => setSummary(d.summary)).catch(() => setSummary(null));
+  }, []);
+  return <div className="space-y-6"><div><h1 className="text-2xl font-bold">Dashboard</h1><p className="text-sm text-muted-foreground">Disaster recovery posture overview</p></div><div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4"><KpiCard label="Total DRP" value={`${plans.length}`} hint="Total plans" /><KpiCard label="Approved" value={`${plans.filter((p) => p.status === 'approved').length}`} hint="Ready for incident" /><KpiCard label="Open Risks" value={`${summary?.openRisks ?? 0}`} hint={`${summary?.highRisks ?? 0} high risk`} /><KpiCard label="Planned Drills" value={`${summary?.plannedDrills ?? 0}`} hint={`${summary?.completedDrills ?? 0} completed`} /></div><div className="grid gap-4 lg:grid-cols-3"><KpiCard label="Assets" value={`${summary?.totalAssets ?? 0}`} hint={`${summary?.criticalAssets ?? 0} critical assets`} /><KpiCard label="Priority Recovery" value={`${summary?.priorityRecoveryAssets ?? 0}`} hint="Priority 1-2 assets" /><KpiCard label="Coverage" value={plans.length ? `${Math.round((plans.filter((p) => p.status === 'approved').length / plans.length) * 100)}%` : '0%'} hint="Approved / total DRP" /></div><div className="rounded-lg border border-border bg-card p-6"><h2 className="mb-2 text-lg font-semibold">DR Plan Builder SaaS workspace aktif</h2><p className="text-sm text-muted-foreground">Buat DRP ISO 22301, register asset dependency, risk register, drill schedule, approval, audit, dan export.</p></div></div>;
+}
 function KpiCard({ label, value, hint }: { label: string; value: string; hint: string }) { return <div className="rounded-lg border border-border bg-card p-4"><p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{label}</p><p className="mt-2 text-2xl font-bold">{value}</p><p className="mt-1 text-xs text-muted-foreground">{hint}</p></div>; }
 function StatusBadge({ status }: { status: string }) { const color = status === 'approved' ? 'bg-green-100 text-green-700' : status === 'in_review' ? 'bg-yellow-100 text-yellow-800' : 'bg-slate-100 text-slate-700'; return <span className={`rounded-full px-2 py-1 text-xs font-medium ${color}`}>{status.replace('_', ' ')}</span>; }
 function Input(props: React.InputHTMLAttributes<HTMLInputElement> & { label: string }) { const { label, ...rest } = props; return <label className="text-sm font-medium">{label}<input {...rest} className="mt-1 w-full rounded-md border px-3 py-2" /></label>; }
