@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, Route, Routes, useNavigate, useParams } from 'react-router-dom';
 import { AlertTriangle, Calendar, CheckCircle2, Download, FileText, Home, Lock, LogOut, Save, Send, Server, Sparkles, Users } from 'lucide-react';
 import * as Y from 'yjs';
@@ -26,6 +26,7 @@ type ResilienceSummary = { totalAssets: number; criticalAssets: number; priority
 type BiaEntry = { id: string; serviceName: string; processName: string; owner: string; impact1h: number; impact4h: number; impact24h: number; financialImpact: number; reputationalImpact: number; regulatoryImpact: number; maxImpactScore: number; criticalityTier: string; currentRtoMinutes: number; currentRpoMinutes: number; dependencyNotes: string; workaround: string };
 type BiaSummary = { totalBia: number; tier1: number; tier2: number; fastestRtoMinutes: number | null; fastestRpoMinutes: number | null };
 type PlanComment = { id: string; sectionKey: string; body: string; status: 'open' | 'resolved'; parentCommentId?: string | null; mentionedEmails?: string[]; createdAt: string };
+type PlanVersion = { id: string; version: number; changeSummary: string; createdAt: string };
 type ManagedUser = { id: string; email: string; name: string; role: User['role']; disabled: boolean; mfaEnabled: boolean; createdAt: string };
 
 const API = import.meta.env.VITE_API_URL ?? `${window.location.protocol}//${window.location.hostname}:3001`;
@@ -214,6 +215,7 @@ function PlanEditor() {
   const [draft, setDraft] = useState('');
   const [message, setMessage] = useState('');
   const [comments, setComments] = useState<PlanComment[]>([]);
+  const [versions, setVersions] = useState<PlanVersion[]>([]);
   const [commentBody, setCommentBody] = useState('');
   const [replyTo, setReplyTo] = useState<string | null>(null);
   const [aiSuggestion, setAiSuggestion] = useState('');
@@ -221,12 +223,15 @@ function PlanEditor() {
   const [collabStatus, setCollabStatus] = useState('offline');
   const [collabUsers, setCollabUsers] = useState(1);
   const [error, setError] = useState('');
+  const yDocRef = useRef<Y.Doc | null>(null);
+  const yTextRef = useRef<Y.Text | null>(null);
   async function load() {
     if (!id) return;
     try {
       const loaded = await api<Plan>(`/api/v1/plans/${id}`);
       const commentData = await api<{ comments: PlanComment[] }>(`/api/v1/plans/${id}/comments`);
-      setPlan(loaded); setComments(commentData.comments); setSelected(loaded.sections?.[0]?.sectionKey ?? 'context'); setDraft(loaded.sections?.[0]?.contentMarkdown ?? '');
+      const versionData = await api<{ versions: PlanVersion[] }>(`/api/v1/plans/${id}/versions`);
+      setPlan(loaded); setComments(commentData.comments); setVersions(versionData.versions); setSelected(loaded.sections?.[0]?.sectionKey ?? 'context'); setDraft(loaded.sections?.[0]?.contentMarkdown ?? '');
     }
     catch (err) { setError(err instanceof Error ? err.message : 'Failed to load plan'); }
   }
@@ -235,6 +240,7 @@ function PlanEditor() {
   useEffect(() => {
     if (!id) return;
     const doc = new Y.Doc();
+    yDocRef.current = doc;
     const provider = new WebsocketProvider(COLLAB_WS, `drp-plan-${id}`, doc);
     provider.awareness.setLocalStateField('user', { name: 'Current reviewer', color: '#2563eb' });
     const updatePresence = () => setCollabUsers(Array.from(provider.awareness.getStates().keys()).length || 1);
@@ -245,11 +251,32 @@ function PlanEditor() {
       provider.awareness.off('change', updatePresence);
       provider.destroy();
       doc.destroy();
+      yDocRef.current = null;
+      yTextRef.current = null;
     };
   }, [id]);
 
   const section = plan?.sections?.find((s) => s.sectionKey === selected);
   useEffect(() => { setDraft(section?.contentMarkdown ?? ''); }, [section?.id]);
+
+  useEffect(() => {
+    if (!section || !yDocRef.current) return;
+    const yText = yDocRef.current.getText(`section-${section.sectionKey}`);
+    yTextRef.current = yText;
+    if (yText.length === 0 && section.contentMarkdown) yText.insert(0, section.contentMarkdown);
+    setDraft(yText.toString() || section.contentMarkdown || '');
+    const observer = () => setDraft(yText.toString());
+    yText.observe(observer);
+    return () => yText.unobserve(observer);
+  }, [section?.id, section?.sectionKey]);
+
+  function updateDraft(value: string) {
+    setDraft(value);
+    const yText = yTextRef.current;
+    if (!yText || yText.toString() === value) return;
+    yText.delete(0, yText.length);
+    yText.insert(0, value);
+  }
 
   async function saveSection() {
     if (!id || !section) return;
@@ -258,6 +285,8 @@ function PlanEditor() {
   }
   async function submitReview() { if (!id) return; setPlan(await api<Plan>(`/api/v1/plans/${id}/submit`, { method: 'POST' })); setMessage('Submitted for approval.'); }
   async function approve() { if (!id) return; const signatureText = prompt('Approval signature text'); if (!signatureText) return; setPlan(await api<Plan>(`/api/v1/plans/${id}/approve`, { method: 'POST', body: JSON.stringify({ signatureText }) })); setMessage('Approved and signed.'); }
+  async function createVersion() { if (!id) return; await api<PlanVersion>(`/api/v1/plans/${id}/versions`, { method: 'POST', body: JSON.stringify({ changeSummary: 'Manual snapshot from editor' }) }); await load(); setMessage('Version snapshot created.'); }
+  async function rollbackVersion(versionId: string) { if (!id || !confirm('Rollback plan content to this version?')) return; setPlan(await api<Plan>(`/api/v1/plans/${id}/versions/${versionId}/rollback`, { method: 'POST' })); await load(); setMessage('Plan rolled back to selected version.'); }
   async function addComment() {
     if (!id || !section || !commentBody.trim()) return;
     const comment = await api<PlanComment>(`/api/v1/plans/${id}/comments`, { method: 'POST', body: JSON.stringify({ sectionKey: section.sectionKey, body: commentBody, parentCommentId: replyTo ?? undefined }) });
@@ -301,7 +330,7 @@ function PlanEditor() {
   }
   function applyAISuggestion() {
     if (!aiSuggestion.trim()) return;
-    setDraft(aiSuggestion);
+    updateDraft(aiSuggestion);
     setMessage('AI suggestion applied to draft. Click Save to persist.');
   }
 
@@ -312,9 +341,10 @@ function PlanEditor() {
   return <div className="space-y-4"><div className="flex items-start justify-between"><div><Link to="/plans" className="text-sm text-primary hover:underline">← Back to plans</Link><h1 className="mt-1 text-2xl font-bold">{plan.title}</h1><p className="text-sm text-muted-foreground">{plan.serviceName} · version {plan.version} · RTO {plan.rtoMinutes}m · RPO {plan.rpoMinutes}m</p><p className="mt-1 text-xs text-muted-foreground">Realtime collaboration: {collabStatus} · {collabUsers} active editor(s)</p></div><div className="flex items-center gap-2"><StatusBadge status={plan.status} /><button onClick={submitReview} className="inline-flex items-center gap-1 rounded-md border px-3 py-2 text-sm"><Send className="h-4 w-4" /> Submit</button><button onClick={approve} className="inline-flex items-center gap-1 rounded-md bg-green-600 px-3 py-2 text-sm text-white"><CheckCircle2 className="h-4 w-4" /> Approve</button></div></div>
     {message && <div className="rounded-md border border-green-200 bg-green-50 p-3 text-sm text-green-700">{message}</div>}
     <div className="grid gap-4 lg:grid-cols-[280px_1fr]"><aside className="rounded-lg border bg-card p-3"><div className="mb-2 text-sm font-medium">14 ISO 22301 Sections</div><div className="space-y-1">{plan.sections?.map((s) => <button key={s.id} onClick={() => setSelected(s.sectionKey)} className={`w-full rounded-md px-3 py-2 text-left text-sm ${s.sectionKey === selected ? 'bg-primary text-white' : 'hover:bg-muted'}`}><div className="font-medium">{s.order}. {s.title.replace(/^\d+\. /, '')}</div><div className="text-xs opacity-75">{s.isoClause}</div></button>)}</div></aside>
-      <section className="rounded-lg border bg-card"><div className="flex items-center justify-between border-b p-4"><div><h2 className="font-semibold">{section?.title}</h2><p className="text-xs text-muted-foreground">Compliance badge: {section?.isoClause}</p></div><div className="flex gap-2"><button onClick={suggestWithAI} disabled={aiLoading} className="inline-flex items-center gap-1 rounded-md border px-3 py-2 text-sm disabled:opacity-50"><Sparkles className="h-4 w-4" /> {aiLoading ? 'AI drafting...' : 'AI Suggest'}</button><button onClick={saveSection} className="inline-flex items-center gap-1 rounded-md bg-primary px-3 py-2 text-sm text-white"><Save className="h-4 w-4" /> Save</button></div></div><textarea value={draft} onChange={(e) => setDraft(e.target.value)} className="h-[520px] w-full resize-none p-4 font-mono text-sm outline-none" /></section></div>
+      <section className="rounded-lg border bg-card"><div className="flex items-center justify-between border-b p-4"><div><h2 className="font-semibold">{section?.title}</h2><p className="text-xs text-muted-foreground">Compliance badge: {section?.isoClause}</p></div><div className="flex gap-2"><button onClick={suggestWithAI} disabled={aiLoading} className="inline-flex items-center gap-1 rounded-md border px-3 py-2 text-sm disabled:opacity-50"><Sparkles className="h-4 w-4" /> {aiLoading ? 'AI drafting...' : 'AI Suggest'}</button><button onClick={saveSection} className="inline-flex items-center gap-1 rounded-md bg-primary px-3 py-2 text-sm text-white"><Save className="h-4 w-4" /> Save</button></div></div><textarea value={draft} onChange={(e) => updateDraft(e.target.value)} className="h-[520px] w-full resize-none p-4 font-mono text-sm outline-none" /></section></div>
     {aiSuggestion && <section className="rounded-lg border border-blue-200 bg-blue-50 p-4"><div className="flex items-center justify-between"><div><h2 className="font-semibold text-blue-900">AI suggestion</h2><p className="text-xs text-blue-700">Review before applying. AI output is draft-only until saved.</p></div><button onClick={applyAISuggestion} className="rounded-md bg-blue-700 px-3 py-2 text-sm text-white">Apply to draft</button></div><pre className="mt-3 max-h-80 overflow-auto whitespace-pre-wrap rounded-md bg-white p-3 text-sm text-slate-800">{aiSuggestion}</pre></section>}
     <section className="rounded-lg border bg-card p-4"><div className="flex items-center justify-between"><div><h2 className="font-semibold">Section comments</h2><p className="text-xs text-muted-foreground">Use @email format to mention a reviewer. Replies stay linked to the parent comment.</p></div><StatusBadge status={`${currentComments.filter((comment) => comment.status === 'open').length} open`} /></div>{replyTo && <div className="mt-3 rounded-md border border-blue-200 bg-blue-50 p-2 text-xs text-blue-700">Replying to comment {replyTo.slice(0, 8)}… <button onClick={() => setReplyTo(null)} className="ml-2 underline">cancel</button></div>}<div className="mt-3 flex gap-2"><input value={commentBody} onChange={(e) => setCommentBody(e.target.value)} placeholder="Add review note, reply, or @reviewer@datacomm.co.id" className="flex-1 rounded-md border px-3 py-2 text-sm" /><button onClick={addComment} className="rounded-md bg-primary px-3 py-2 text-sm text-white">{replyTo ? 'Add reply' : 'Add comment'}</button></div><div className="mt-4 space-y-2">{currentComments.length === 0 ? <p className="text-sm text-muted-foreground">No comments for this section.</p> : currentComments.map((comment) => <div key={comment.id} className={`rounded-md border p-3 text-sm ${comment.parentCommentId ? 'ml-6 bg-muted/30' : ''}`}><div className="flex items-center justify-between gap-3"><div><p>{comment.body}</p>{comment.parentCommentId && <p className="mt-1 text-xs text-muted-foreground">Reply to {comment.parentCommentId.slice(0, 8)}…</p>}{comment.mentionedEmails && comment.mentionedEmails.length > 0 && <p className="mt-1 text-xs text-blue-700">Mentions: {comment.mentionedEmails.join(', ')}</p>}</div><StatusBadge status={comment.status} /></div><div className="mt-2 flex gap-3">{comment.status === 'open' && <button onClick={() => resolveComment(comment.id)} className="text-xs text-primary hover:underline">Mark resolved</button>}<button onClick={() => setReplyTo(comment.id)} className="text-xs text-primary hover:underline">Reply</button></div></div>)}</div></section>
+    <section className="rounded-lg border bg-card p-4"><div className="flex items-center justify-between"><div><h2 className="font-semibold">Version history</h2><p className="text-xs text-muted-foreground">Create snapshots before major changes and rollback when needed.</p></div><button onClick={createVersion} className="rounded-md bg-primary px-3 py-2 text-sm text-white">Create snapshot</button></div><div className="mt-3 space-y-2">{versions.length === 0 ? <p className="text-sm text-muted-foreground">No snapshots yet.</p> : versions.map((version) => <div key={version.id} className="flex items-center justify-between rounded-md border p-3 text-sm"><div><span className="font-medium">Version {version.version}</span><span className="ml-2 text-muted-foreground">{version.changeSummary}</span><p className="text-xs text-muted-foreground">{new Date(version.createdAt).toLocaleString()}</p></div><button onClick={() => rollbackVersion(version.id)} className="text-xs text-primary hover:underline">Rollback</button></div>)}</div></section>
     <div className="flex flex-wrap gap-2"><DownloadLink href={`/api/v1/plans/${plan.id}/export/markdown`} label="Markdown" /><DownloadLink href={`/api/v1/plans/${plan.id}/export/pdf`} label="PDF" /><DownloadLink href={`/api/v1/plans/${plan.id}/export/docx`} label="DOCX" /><DownloadLink href={`/api/v1/plans/${plan.id}/audit.csv`} label="Audit CSV" /></div>
   </div>;
 }
@@ -393,7 +423,7 @@ function AssetsPage() {
       form.reset(); await load();
     } catch (err) { setError(err instanceof Error ? err.message : 'Create asset failed'); }
   }
-  return <RegisterPage title="Assets" subtitle="Service dependency and recovery-priority register." error={error}><form onSubmit={submit} className="grid gap-3 rounded-lg border bg-card p-4 md:grid-cols-3"><Input name="serviceName" label="Service" required /><Input name="assetName" label="Asset name" required /><Input name="assetType" label="Asset type" placeholder="database / vm / network" required /><Input name="owner" label="Owner" required /><Input name="recoveryPriority" label="Recovery priority" type="number" min="1" max="5" defaultValue="3" required /><label className="text-sm font-medium">Criticality<select name="criticality" defaultValue="high" className="mt-1 w-full rounded-md border px-3 py-2"><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option><option value="critical">Critical</option></select></label><Input name="dependencies" label="Dependencies" placeholder="comma separated" /><label className="text-sm font-medium md:col-span-2">Notes<textarea name="notes" className="mt-1 h-20 w-full rounded-md border px-3 py-2" /></label><div className="md:col-span-3"><button className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-white">Add asset</button></div></form><SimpleTable headers={['Service','Asset','Type','Owner','Priority','Criticality']} rows={assets.map((asset) => [asset.serviceName, asset.assetName, asset.assetType, asset.owner, String(asset.recoveryPriority), asset.criticality])} empty="No assets registered." /></RegisterPage>;
+  return <RegisterPage title="Assets" subtitle="Service dependency and recovery-priority register." error={error}><form onSubmit={submit} className="grid gap-3 rounded-lg border bg-card p-4 md:grid-cols-3"><Input name="serviceName" label="Service" required /><Input name="assetName" label="Asset name" required /><Input name="assetType" placeholder="database / vm / network" required label="Asset type" /><Input name="owner" label="Owner" required /><Input name="recoveryPriority" label="Recovery priority" type="number" min="1" max="5" defaultValue="3" required /><label className="text-sm font-medium">Criticality<select name="criticality" defaultValue="high" className="mt-1 w-full rounded-md border px-3 py-2"><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option><option value="critical">Critical</option></select></label><Input name="dependencies" label="Dependencies" placeholder="comma separated" /><label className="text-sm font-medium md:col-span-2">Notes<textarea name="notes" className="mt-1 h-20 w-full rounded-md border px-3 py-2" /></label><div className="md:col-span-3"><button className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-white">Add asset</button></div></form><div className="rounded-lg border bg-card p-4"><h2 className="font-semibold">Dependency map</h2><p className="text-xs text-muted-foreground">Shows declared upstream/downstream dependencies per asset.</p><div className="mt-3 space-y-2">{assets.filter((asset) => asset.dependencies.length > 0).length === 0 ? <p className="text-sm text-muted-foreground">No dependencies declared yet.</p> : assets.filter((asset) => asset.dependencies.length > 0).map((asset) => <div key={asset.id} className="rounded-md border p-3 text-sm"><span className="font-medium">{asset.assetName}</span><span className="mx-2 text-muted-foreground">depends on</span>{asset.dependencies.map((dependency) => <span key={dependency} className="mr-2 rounded-full bg-slate-100 px-2 py-1 text-xs">{dependency}</span>)}</div>)}</div></div><SimpleTable headers={['Service','Asset','Type','Owner','Priority','Criticality']} rows={assets.map((asset) => [asset.serviceName, asset.assetName, asset.assetType, asset.owner, String(asset.recoveryPriority), asset.criticality])} empty="No assets registered." /></RegisterPage>;
 }
 
 function RisksPage() {
@@ -410,7 +440,7 @@ function RisksPage() {
       form.reset(); await load();
     } catch (err) { setError(err instanceof Error ? err.message : 'Create risk failed'); }
   }
-  return <RegisterPage title="Risks" subtitle="Probability × impact risk register tied to DR readiness." error={error}><form onSubmit={submit} className="grid gap-3 rounded-lg border bg-card p-4 md:grid-cols-3"><Input name="serviceName" label="Service" required /><Input name="riskTitle" label="Risk title" required /><Input name="category" label="Category" required /><Input name="probability" label="Probability 1-5" type="number" min="1" max="5" defaultValue="3" required /><Input name="impact" label="Impact 1-5" type="number" min="1" max="5" defaultValue="4" required /><Input name="owner" label="Owner" /><label className="text-sm font-medium md:col-span-3">Mitigation<textarea name="mitigation" className="mt-1 h-20 w-full rounded-md border px-3 py-2" /></label><div className="md:col-span-3"><button className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-white">Add risk</button></div></form><SimpleTable headers={['Service','Risk','Category','Score','Owner','Status']} rows={risks.map((risk) => [risk.serviceName, risk.riskTitle, risk.category, String(risk.riskScore), risk.owner || '-', risk.status])} empty="No risks registered." /></RegisterPage>;
+  return <RegisterPage title="Risks" subtitle="Probability × impact risk register tied to DR readiness." error={error}><form onSubmit={submit} className="grid gap-3 rounded-lg border bg-card p-4 md:grid-cols-3"><Input name="serviceName" label="Service" required /><Input name="riskTitle" label="Risk title" required /><Input name="category" label="Category" required /><Input name="probability" label="Probability 1-5" type="number" min="1" max="5" defaultValue="3" required /><Input name="impact" label="Impact 1-5" type="number" min="1" max="5" defaultValue="4" required /><Input name="owner" label="Owner" /><label className="text-sm font-medium md:col-span-3">Mitigation<textarea name="mitigation" className="mt-1 h-20 w-full rounded-md border px-3 py-2" /></label><div className="md:col-span-3"><button className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-white">Add risk</button></div></form><div className="rounded-lg border bg-card p-4"><h2 className="font-semibold">Risk heatmap</h2><p className="text-xs text-muted-foreground">Grid count by probability and impact.</p><div className="mt-3 grid max-w-xl grid-cols-6 gap-1 text-center text-xs"><div></div>{[1,2,3,4,5].map((impact) => <div key={impact} className="font-medium">I{impact}</div>)}{[5,4,3,2,1].map((probability) => <><div key={`p-${probability}`} className="py-2 font-medium">P{probability}</div>{[1,2,3,4,5].map((impact) => { const count = risks.filter((risk) => risk.probability === probability && risk.impact === impact).length; const score = probability * impact; const color = score >= 15 ? 'bg-red-100 text-red-700' : score >= 8 ? 'bg-yellow-100 text-yellow-800' : 'bg-green-100 text-green-700'; return <div key={`${probability}-${impact}`} className={`rounded p-2 ${color}`}>{count}</div>; })}</>)}</div></div><SimpleTable headers={['Service','Risk','Category','Score','Owner','Status']} rows={risks.map((risk) => [risk.serviceName, risk.riskTitle, risk.category, String(risk.riskScore), risk.owner || '-', risk.status])} empty="No risks registered." /></RegisterPage>;
 }
 
 function DrillsPage() {
@@ -427,7 +457,13 @@ function DrillsPage() {
       form.reset(); await load();
     } catch (err) { setError(err instanceof Error ? err.message : 'Create drill failed'); }
   }
-  return <RegisterPage title="Drills" subtitle="Recovery exercise calendar and result tracking." error={error}><form onSubmit={submit} className="grid gap-3 rounded-lg border bg-card p-4 md:grid-cols-2"><Input name="serviceName" label="Service" required /><Input name="drillTitle" label="Drill title" required /><Input name="scheduledAt" label="Schedule" type="datetime-local" required /><Input name="owner" label="Owner" required /><label className="text-sm font-medium md:col-span-2">Scope<textarea name="scope" className="mt-1 h-20 w-full rounded-md border px-3 py-2" required /></label><div className="md:col-span-2"><button className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-white">Schedule drill</button></div></form><SimpleTable headers={['Service','Drill','Schedule','Owner','Status']} rows={drills.map((drill) => [drill.serviceName, drill.drillTitle, new Date(drill.scheduledAt).toLocaleString(), drill.owner, drill.status])} empty="No drills scheduled." /></RegisterPage>;
+  async function completeDrill(drill: RecoveryDrill) {
+    const resultSummary = prompt('Result summary / evidence notes', drill.resultSummary || 'Completed successfully');
+    if (resultSummary === null) return;
+    await api<RecoveryDrill>(`/api/v1/drills/${drill.id}`, { method: 'PATCH', body: JSON.stringify({ status: 'completed', resultSummary }) });
+    await load();
+  }
+  return <RegisterPage title="Drills" subtitle="Recovery exercise calendar and result tracking." error={error}><form onSubmit={submit} className="grid gap-3 rounded-lg border bg-card p-4 md:grid-cols-2"><Input name="serviceName" label="Service" required /><Input name="drillTitle" label="Drill title" required /><Input name="scheduledAt" label="Schedule" type="datetime-local" required /><Input name="owner" label="Owner" required /><label className="text-sm font-medium md:col-span-2">Scope<textarea name="scope" className="mt-1 h-20 w-full rounded-md border px-3 py-2" required /></label><div className="md:col-span-2"><button className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-white">Schedule drill</button></div></form><div className="rounded-lg border bg-card"><div className="border-b p-4 font-medium">Drill results</div>{drills.length === 0 ? <div className="p-6 text-center text-sm text-muted-foreground">No drills scheduled.</div> : <div className="divide-y">{drills.map((drill) => <div key={drill.id} className="flex items-center justify-between gap-3 p-4 text-sm"><div><div className="font-medium">{drill.drillTitle}</div><div className="text-muted-foreground">{drill.serviceName} · {new Date(drill.scheduledAt).toLocaleString()} · {drill.owner}</div>{drill.resultSummary && <p className="mt-1 text-xs text-muted-foreground">Result: {drill.resultSummary}</p>}</div><div className="flex items-center gap-2"><StatusBadge status={drill.status} />{drill.status !== 'completed' && <button onClick={() => completeDrill(drill)} className="rounded-md border px-3 py-2 text-xs">Mark completed</button>}</div></div>)}</div>}</div></RegisterPage>;
 }
 
 function UsersPage() {

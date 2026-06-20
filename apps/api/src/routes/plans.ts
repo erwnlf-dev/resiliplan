@@ -190,6 +190,23 @@ export async function planRoutes(app: FastifyInstance) {
     return reply.code(201).send(version);
   });
 
+  app.post('/api/v1/plans/:id/versions/:versionId/rollback', async (req, reply) => {
+    const user = await requireAuth(req);
+    requireRole(user, ['admin', 'coordinator']);
+    const { id, versionId } = z.object({ id: z.string().uuid(), versionId: z.string().uuid() }).parse(req.params);
+    const current = await getPlanWithSections(id, user.tenantId);
+    if (!current) return reply.code(404).send({ type: 'about:blank', title: 'Not Found', status: 404, detail: 'Plan not found', instance: req.id });
+    const [version] = await db.select().from(planVersions).where(and(eq(planVersions.id, versionId), eq(planVersions.planId, id))).limit(1);
+    if (!version) return reply.code(404).send({ type: 'about:blank', title: 'Not Found', status: 404, detail: 'Version not found', instance: req.id });
+    const snapshot = version.snapshot as { title?: string; serviceName?: string; serviceOwner?: string; businessOwner?: string | null; description?: string; criticality?: string; rtoMinutes?: number; rpoMinutes?: number; metadata?: Record<string, unknown>; sections?: Array<{ sectionKey: string; contentMarkdown: string; status?: 'draft' | 'ready_for_review' | 'approved' }> };
+    await db.update(drpPlans).set({ title: snapshot.title ?? current.title, serviceName: snapshot.serviceName ?? current.serviceName, serviceOwner: snapshot.serviceOwner ?? current.serviceOwner, businessOwner: snapshot.businessOwner ?? current.businessOwner, description: snapshot.description ?? current.description, criticality: snapshot.criticality ?? current.criticality, rtoMinutes: snapshot.rtoMinutes ?? current.rtoMinutes, rpoMinutes: snapshot.rpoMinutes ?? current.rpoMinutes, metadata: snapshot.metadata ?? current.metadata, updatedBy: user.id, updatedAt: new Date() }).where(and(eq(drpPlans.id, id), eq(drpPlans.tenantId, user.tenantId)));
+    for (const section of snapshot.sections ?? []) {
+      await db.update(drpSections).set({ contentMarkdown: section.contentMarkdown, status: section.status ?? 'draft', updatedBy: user.id, updatedAt: new Date() }).where(and(eq(drpSections.planId, id), eq(drpSections.sectionKey, section.sectionKey)));
+    }
+    await audit(user.tenantId, user.id, 'plan_version', version.id, 'rollback', `Rolled back ${current.title} to version ${version.version}`, { planId: id, version: version.version });
+    return getPlanWithSections(id, user.tenantId);
+  });
+
   app.get('/api/v1/plans/:id/comments', async (req, reply) => {
     const user = await requireAuth(req);
     const { id } = z.object({ id: z.string().uuid() }).parse(req.params);
