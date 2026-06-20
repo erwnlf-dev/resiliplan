@@ -5,15 +5,17 @@ import { db } from '../db/client.js';
 import { users } from '../db/schema/index.js';
 import {
   createSession,
+  createTotpSecret,
   deleteSession,
   getAuthUser,
   readCookie,
   requireAuth,
   sessionCookieName,
   verifyPassword,
+  verifyTotp,
 } from '../auth/auth-service.js';
 
-const loginSchema = z.object({ email: z.string().email(), password: z.string().min(1) });
+const loginSchema = z.object({ email: z.string().email(), password: z.string().min(1), totp: z.string().optional() });
 
 function cookieHeader(name: string, value: string, expires: Date) {
   return `${name}=${encodeURIComponent(value)}; HttpOnly; SameSite=Lax; Path=/; Expires=${expires.toUTCString()}`;
@@ -25,6 +27,11 @@ export async function authRoutes(app: FastifyInstance) {
     const [user] = await db.select().from(users).where(eq(users.email, body.email.toLowerCase())).limit(1);
     if (!user || user.disabled || !(await verifyPassword(body.password, user.passwordHash))) {
       return reply.code(401).send({ type: 'about:blank', title: 'Unauthorized', status: 401, detail: 'Invalid email or password', instance: req.id });
+    }
+    if (user.mfaEnabled) {
+      if (!user.mfaSecret || !body.totp || !verifyTotp(user.mfaSecret, body.totp)) {
+        return reply.code(401).send({ type: 'about:blank', title: 'MFA Required', status: 401, detail: 'Valid TOTP token required', instance: req.id });
+      }
     }
     const session = await createSession(user.id);
     await db.update(users).set({ lastLoginAt: new Date(), lastLoginIp: req.ip }).where(eq(users.id, user.id));
@@ -43,6 +50,29 @@ export async function authRoutes(app: FastifyInstance) {
     const user = await getAuthUser(req);
     if (!user) return reply.code(401).send({ type: 'about:blank', title: 'Unauthorized', status: 401, detail: 'Authentication required', instance: req.id });
     return { user };
+  });
+
+  app.post('/api/v1/auth/mfa/setup', async (req) => {
+    const user = await requireAuth(req);
+    const secret = createTotpSecret();
+    await db.update(users).set({ mfaSecret: secret, mfaEnabled: false, updatedAt: new Date() }).where(eq(users.id, user.id));
+    return {
+      secret,
+      otpauthUrl: `otpauth://totp/ResiliPlan:${encodeURIComponent(user.email)}?secret=${encodeURIComponent(secret)}&issuer=ResiliPlan`,
+    };
+  });
+
+  app.post('/api/v1/auth/mfa/verify', async (req) => {
+    const user = await requireAuth(req);
+    const body = z.object({ token: z.string().min(6).max(8) }).parse(req.body);
+    const [record] = await db.select().from(users).where(eq(users.id, user.id)).limit(1);
+    if (!record?.mfaSecret || !verifyTotp(record.mfaSecret, body.token)) {
+      const err = new Error('Invalid MFA token') as Error & { statusCode: number };
+      err.statusCode = 400;
+      throw err;
+    }
+    await db.update(users).set({ mfaEnabled: true, updatedAt: new Date() }).where(eq(users.id, user.id));
+    return { ok: true, mfaEnabled: true };
   });
 
   app.post('/api/v1/auth/change-password', async (req) => {

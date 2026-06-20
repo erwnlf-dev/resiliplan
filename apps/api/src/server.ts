@@ -14,6 +14,7 @@ import { healthRoutes } from './routes/health.js';
 import { authRoutes } from './routes/auth.js';
 import { planRoutes } from './routes/plans.js';
 import { metricsRoutes } from './routes/metrics.js';
+import { CSRF_COOKIE, CSRF_HEADER, createCsrfToken, csrfCookieHeader, readCookieValue, shouldCheckCsrf, verifyCsrfToken } from './auth/csrf-service.js';
 
 export async function buildServer(): Promise<FastifyInstance> {
   const app = Fastify({
@@ -108,6 +109,28 @@ export async function buildServer(): Promise<FastifyInstance> {
 
   // ===== Sensible (HTTP errors helpers) =====
   await app.register(sensible);
+
+  // ===== CSRF double-submit guard =====
+  app.addHook('onRequest', async (req, reply) => {
+    if (!readCookieValue(req.headers.cookie, CSRF_COOKIE)) {
+      reply.header('Set-Cookie', csrfCookieHeader(createCsrfToken()));
+    }
+
+    if (!shouldCheckCsrf(req.method, req.url)) return;
+
+    const cookieToken = readCookieValue(req.headers.cookie, CSRF_COOKIE);
+    const headerValue = req.headers[CSRF_HEADER];
+    const headerToken = Array.isArray(headerValue) ? headerValue[0] : headerValue;
+    if (!verifyCsrfToken(cookieToken, headerToken)) {
+      return reply.code(403).send({
+        type: 'https://resiliplan.kantor.local/errors/csrf',
+        title: 'Forbidden',
+        status: 403,
+        detail: 'CSRF token missing or invalid',
+        instance: req.id,
+      });
+    }
+  });
 
   // ===== Health Check (no auth, no rate limit) =====
   await app.register(healthRoutes);

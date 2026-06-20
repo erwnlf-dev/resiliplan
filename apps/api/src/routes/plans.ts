@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { db } from '../db/client.js';
 import { approvals, auditLogs, drpPlans, drpSections } from '../db/schema/index.js';
 import { ISO_22301_SECTIONS, defaultSectionContent } from '../drp/iso-template.js';
+import { renderDocxPayload, renderMarkdownPayload, renderPdfPayload } from '../drp/export-service.js';
 import { requireAuth, requireRole } from '../auth/auth-service.js';
 
 const createPlanSchema = z.object({
@@ -31,28 +32,6 @@ async function getPlanWithSections(planId: string, tenantId: string) {
   if (!plan) return null;
   const sections = await db.select().from(drpSections).where(eq(drpSections.planId, planId)).orderBy(asc(drpSections.order));
   return { ...plan, sections };
-}
-
-function renderMarkdown(plan: Awaited<ReturnType<typeof getPlanWithSections>>) {
-  if (!plan) return '';
-  const lines = [
-    `# ${plan.title}`,
-    '',
-    `**Service:** ${plan.serviceName}`,
-    `**Service owner:** ${plan.serviceOwner}`,
-    `**Criticality:** ${plan.criticality}`,
-    `**RTO:** ${plan.rtoMinutes} minutes`,
-    `**RPO:** ${plan.rpoMinutes} minutes`,
-    `**Version:** ${plan.version}`,
-    `**Status:** ${plan.status}`,
-    '',
-    '---',
-    '',
-  ];
-  for (const section of plan.sections) {
-    lines.push(section.contentMarkdown, '', `> Mapping: ${section.isoClause}`, '', '---', '');
-  }
-  return lines.join('\n');
 }
 
 export async function planRoutes(app: FastifyInstance) {
@@ -188,8 +167,9 @@ export async function planRoutes(app: FastifyInstance) {
     const { id } = z.object({ id: z.string().uuid() }).parse(req.params);
     const plan = await getPlanWithSections(id, user.tenantId);
     if (!plan) return reply.code(404).send({ type: 'about:blank', title: 'Not Found', status: 404, detail: 'Plan not found', instance: req.id });
-    reply.type('text/markdown').header('Content-Disposition', `attachment; filename="${plan.serviceName}.md"`);
-    return renderMarkdown(plan);
+    const payload = renderMarkdownPayload(plan);
+    reply.type(payload.contentType).header('Content-Disposition', `attachment; filename="${payload.filename}"`);
+    return payload.body;
   });
 
   app.get('/api/v1/plans/:id/export/pdf', async (req, reply) => {
@@ -197,11 +177,9 @@ export async function planRoutes(app: FastifyInstance) {
     const { id } = z.object({ id: z.string().uuid() }).parse(req.params);
     const plan = await getPlanWithSections(id, user.tenantId);
     if (!plan) return reply.code(404).send({ type: 'about:blank', title: 'Not Found', status: 404, detail: 'Plan not found', instance: req.id });
-    const text = renderMarkdown(plan).replace(/[()\\]/g, '\\$&').slice(0, 6000);
-    const stream = `BT /F1 10 Tf 40 760 Td (${text.replace(/\n/g, ') Tj 0 -14 Td (')}) Tj ET`;
-    const pdf = `%PDF-1.4\n1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj\n2 0 obj << /Type /Pages /Kids [3 0 R] /Count 1 >> endobj\n3 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >> endobj\n4 0 obj << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >> endobj\n5 0 obj << /Length ${stream.length} >> stream\n${stream}\nendstream endobj\ntrailer << /Root 1 0 R >>\n%%EOF`;
-    reply.type('application/pdf').header('Content-Disposition', `attachment; filename="${plan.serviceName}.pdf"`);
-    return pdf;
+    const payload = renderPdfPayload(plan);
+    reply.type(payload.contentType).header('Content-Disposition', `attachment; filename="${payload.filename}"`);
+    return payload.body;
   });
 
   app.get('/api/v1/plans/:id/export/docx', async (req, reply) => {
@@ -209,7 +187,8 @@ export async function planRoutes(app: FastifyInstance) {
     const { id } = z.object({ id: z.string().uuid() }).parse(req.params);
     const plan = await getPlanWithSections(id, user.tenantId);
     if (!plan) return reply.code(404).send({ type: 'about:blank', title: 'Not Found', status: 404, detail: 'Plan not found', instance: req.id });
-    reply.type('application/vnd.openxmlformats-officedocument.wordprocessingml.document').header('Content-Disposition', `attachment; filename="${plan.serviceName}.docx"`);
-    return renderMarkdown(plan);
+    const payload = renderDocxPayload(plan);
+    reply.type(payload.contentType).header('Content-Disposition', `attachment; filename="${payload.filename}"`);
+    return payload.body;
   });
 }

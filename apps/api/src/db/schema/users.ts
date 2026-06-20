@@ -14,6 +14,8 @@ export const users = pgTable('users', {
   role: userRole('role').default('viewer').notNull(),
   disabled: boolean('disabled').default(false).notNull(),
   mustResetPassword: boolean('must_reset_password').default(false).notNull(),
+  mfaEnabled: boolean('mfa_enabled').default(false).notNull(),
+  mfaSecret: text('mfa_secret'),
   resetToken: text('reset_token'),
   resetTokenExpiresAt: timestamp('reset_token_expires_at'),
   lastLoginAt: timestamp('last_login_at'),

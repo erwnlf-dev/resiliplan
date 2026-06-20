@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { generateTotp, hashPassword, validatePasswordPolicy, verifyPassword, verifyTotp } from './auth-service.js';
+import { createTotpSecret, generateTotp, hashPassword, validatePasswordPolicy, verifyPassword, verifyTotp } from './auth-service.js';
 
 describe('auth-service', () => {
   it('hashes and verifies passwords using the native scrypt format', async () => {
@@ -13,6 +13,12 @@ describe('auth-service', () => {
     expect(validatePasswordPolicy('short')).toEqual(expect.arrayContaining(['Password minimum 12 characters.']));
     expect(validatePasswordPolicy('longbutnosymbol1A')).toContain('Password must include symbol.');
     expect(validatePasswordPolicy('LongEnough123!')).toHaveLength(0);
+  });
+
+  it('generates a base64 TOTP secret', () => {
+    const secret = createTotpSecret();
+    expect(Buffer.from(secret, 'base64').byteLength).toBe(20);
+    expect(createTotpSecret()).not.toEqual(secret);
   });
 
   it('generates and verifies a six digit TOTP token', () => {

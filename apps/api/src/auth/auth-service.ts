@@ -97,6 +97,10 @@ export function requireRole(user: AuthUser, roles: AuthUser['role'][]): void {
   }
 }
 
+export function createTotpSecret(): string {
+  return randomBytes(20).toString('base64');
+}
+
 export function generateTotp(secret: string, now = Date.now()): string {
   const counter = Math.floor(now / 1000 / 30);
   const msg = Buffer.alloc(8);
