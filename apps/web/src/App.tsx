@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, Route, Routes, useNavigate, useParams } from 'react-router-dom';
-import { Activity, AlertTriangle, Bell, Calendar, CheckCircle2, CreditCard, Download, FileText, Home, Lock, LogOut, Save, Send, Server, Sparkles, Users } from 'lucide-react';
+import { Activity, AlertTriangle, Bell, Calendar, CheckCircle2, CreditCard, Download, FileText, Home, Lock, LogOut, Mail, Save, Send, Server, Sparkles, Users } from 'lucide-react';
 import * as Y from 'yjs';
 import { WebsocketProvider } from 'y-websocket';
 
@@ -31,6 +31,7 @@ type ManagedUser = { id: string; email: string; name: string; role: User['role']
 type NotificationItem = { id: string; title: string; body: string; type: string; status: 'unread' | 'read'; createdAt: string };
 type MonitoringSummary = { status: string; timestamp: string; counters: { plans: number; users: number; risks: number; drills: number; notifications: number }; system: { uptimeSeconds: number; memoryUsageMB: number } };
 type BillingSummary = { subscription: { planCode: string; status: string; seatsLimit: number; plansLimit: number; aiRequestsLimit: number; currentPeriodEnd: string }; usage: Record<string, number> };
+type EmailOutboxItem = { id: string; toEmail: string; subject: string; bodyText: string; emailType: string; status: 'queued' | 'sent' | 'failed' | 'cancelled'; lastError?: string | null; queuedAt: string };
 
 const API = import.meta.env.VITE_API_URL ?? `${window.location.protocol}//${window.location.hostname}:3001`;
 const COLLAB_WS = import.meta.env.VITE_COLLAB_WS_URL ?? `ws://${window.location.hostname}:3002`;
@@ -115,6 +116,7 @@ function Shell({ user, onUserUpdate, onLogout }: { user: User; onUserUpdate: (us
           <NavLink to="/notifications" icon={<Bell className="h-4 w-4" />}>Notifications</NavLink>
           <NavLink to="/monitoring" icon={<Activity className="h-4 w-4" />}>Monitoring</NavLink>
           <NavLink to="/billing" icon={<CreditCard className="h-4 w-4" />}>Billing</NavLink>
+          <NavLink to="/email-outbox" icon={<Mail className="h-4 w-4" />}>Email Outbox</NavLink>
           <NavLink to="/security" icon={<Lock className="h-4 w-4" />}>Security</NavLink>
         </nav></aside>
         <main className="flex-1"><Routes>
@@ -129,6 +131,7 @@ function Shell({ user, onUserUpdate, onLogout }: { user: User; onUserUpdate: (us
           <Route path="/notifications" element={<NotificationsPage />} />
           <Route path="/monitoring" element={<MonitoringPage />} />
           <Route path="/billing" element={<BillingPage />} />
+          <Route path="/email-outbox" element={<EmailOutboxPage />} />
           <Route path="/security" element={<SecurityPage user={user} onUserUpdate={onUserUpdate} />} />
           <Route path="*" element={<NotFound />} />
         </Routes></main>
@@ -497,6 +500,16 @@ function BillingPage() {
   const [error, setError] = useState('');
   useEffect(() => { api<BillingSummary>('/api/v1/billing/summary').then(setSummary).catch((err) => setError(err instanceof Error ? err.message : 'Failed to load billing')); }, []);
   return <RegisterPage title="Billing" subtitle="Subscription limits and usage metering foundation." error={error}>{!summary ? <Centered>Loading billing...</Centered> : <><div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4"><KpiCard label="Plan" value={summary.subscription.planCode} hint={summary.subscription.status} /><KpiCard label="Seats limit" value={`${summary.subscription.seatsLimit}`} hint="User seats" /><KpiCard label="Plans limit" value={`${summary.subscription.plansLimit}`} hint="DRP limit" /><KpiCard label="AI limit" value={`${summary.subscription.aiRequestsLimit}`} hint="Requests / period" /></div><div className="rounded-lg border bg-card p-4"><h2 className="font-semibold">Usage events</h2><div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">{['plan_created','ai_request','export_generated','collaboration_session'].map((key) => <div key={key} className="rounded-md border p-3 text-sm"><div className="text-muted-foreground">{key}</div><div className="text-2xl font-bold">{summary.usage[key] ?? 0}</div></div>)}</div><p className="mt-3 text-xs text-muted-foreground">Current period ends {new Date(summary.subscription.currentPeriodEnd).toLocaleString()}</p></div></>}</RegisterPage>;
+}
+
+function EmailOutboxPage() {
+  const [emails, setEmails] = useState<EmailOutboxItem[]>([]);
+  const [queued, setQueued] = useState(0);
+  const [error, setError] = useState('');
+  async function load() { try { const data = await api<{ emails: EmailOutboxItem[]; queued: number }>('/api/v1/email-outbox'); setEmails(data.emails); setQueued(data.queued); } catch (err) { setError(err instanceof Error ? err.message : 'Failed to load email outbox'); } }
+  useEffect(() => { void load(); }, []);
+  async function updateStatus(id: string, status: EmailOutboxItem['status']) { await api<EmailOutboxItem>(`/api/v1/email-outbox/${id}`, { method: 'PATCH', body: JSON.stringify({ status }) }); await load(); }
+  return <RegisterPage title="Email Outbox" subtitle={`${queued} queued draft email(s). Outbound SMTP is approval/config gated.`} error={error}>{emails.length === 0 ? <div className="rounded-lg border bg-card p-6 text-sm text-muted-foreground">No queued emails.</div> : <div className="space-y-3">{emails.map((email) => <div key={email.id} className="rounded-lg border bg-card p-4 text-sm"><div className="flex items-start justify-between gap-4"><div><div className="font-medium">{email.subject}</div><div className="text-muted-foreground">{email.emailType} · to {email.toEmail} · {new Date(email.queuedAt).toLocaleString()}</div><pre className="mt-3 max-h-40 overflow-auto whitespace-pre-wrap rounded-md bg-muted/40 p-3 text-xs">{email.bodyText}</pre>{email.lastError && <p className="mt-2 text-xs text-red-600">Last error: {email.lastError}</p>}</div><div className="flex shrink-0 flex-col gap-2"><StatusBadge status={email.status} />{email.status === 'queued' && <><button onClick={() => updateStatus(email.id, 'sent')} className="rounded-md border px-3 py-2 text-xs">Mark sent</button><button onClick={() => updateStatus(email.id, 'cancelled')} className="rounded-md border px-3 py-2 text-xs">Cancel</button></>}</div></div></div>)}</div>}</RegisterPage>;
 }
 
 function UsersPage() {

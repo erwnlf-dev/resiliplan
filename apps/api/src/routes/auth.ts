@@ -2,8 +2,10 @@ import { randomBytes } from 'node:crypto';
 import { and, eq, gt } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
+import { config } from '../config/index.js';
 import { db } from '../db/client.js';
-import { users } from '../db/schema/index.js';
+import { auditLogs, emailOutbox, users } from '../db/schema/index.js';
+import { buildPasswordResetEmail } from '../email/email-service.js';
 import {
   createSession,
   createTotpSecret,
@@ -104,6 +106,9 @@ export async function authRoutes(app: FastifyInstance) {
     const resetToken = randomBytes(32).toString('base64url');
     const resetTokenExpiresAt = new Date(Date.now() + 1000 * 60 * 30);
     await db.update(users).set({ resetToken, resetTokenExpiresAt, updatedAt: new Date() }).where(eq(users.id, record.id));
+    const email = buildPasswordResetEmail({ appUrl: config.APP_URL, token: resetToken, minutesValid: 30 });
+    const [queued] = await db.insert(emailOutbox).values({ tenantId: record.tenantId, recipientUserId: record.id, toEmail: record.email, subject: email.subject, bodyText: email.bodyText, emailType: 'password_reset', metadata: { resetUrl: email.resetUrl, expiresAt: resetTokenExpiresAt.toISOString() } }).returning();
+    await db.insert(auditLogs).values({ tenantId: record.tenantId, actorId: record.id, entityType: 'email_outbox', entityId: queued.id, action: 'queue', summary: `Queued password reset email for ${record.email}`, metadata: { requestIp: req.ip } });
     return { ok: true, ...(process.env.NODE_ENV === 'production' ? {} : { resetToken }) };
   });
 

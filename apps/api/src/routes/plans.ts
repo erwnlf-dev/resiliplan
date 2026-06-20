@@ -1,12 +1,14 @@
 import { and, asc, desc, eq, inArray } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
+import { config } from '../config/index.js';
 import { db } from '../db/client.js';
-import { approvals, auditLogs, drpPlans, drpSections, notifications, planComments, planVersions, users } from '../db/schema/index.js';
+import { approvals, auditLogs, drpPlans, drpSections, emailOutbox, notifications, planComments, planVersions, users } from '../db/schema/index.js';
 import { ISO_22301_SECTIONS, defaultSectionContent } from '../drp/iso-template.js';
 import { renderDocxPayload, renderMarkdownPayload, renderPdfPayload } from '../drp/export-service.js';
 import { requireAuth, requireRole } from '../auth/auth-service.js';
 import { createCommentSchema, extractMentionedEmails, summarizeComments, updateCommentSchema } from '../comments/comment-service.js';
+import { buildMentionEmail } from '../email/email-service.js';
 
 const createPlanSchema = z.object({
   title: z.string().min(3),
@@ -29,6 +31,7 @@ async function audit(tenantId: string, actorId: string, entityType: string, enti
 }
 
 async function createCommentNotifications(input: {
+  tenantId: string;
   actorId: string;
   planId: string;
   commentId: string;
@@ -38,6 +41,7 @@ async function createCommentNotifications(input: {
   parentCommentId?: string;
 }) {
   const rows: Array<typeof notifications.$inferInsert> = [];
+  const emailRows: Array<typeof emailOutbox.$inferInsert> = [];
   if (input.mentionedEmails.length > 0) {
     const mentionedUsers = await db.select({ id: users.id, email: users.email }).from(users).where(inArray(users.email, input.mentionedEmails));
     for (const mentioned of mentionedUsers) {
@@ -51,6 +55,8 @@ async function createCommentNotifications(input: {
         title: `Mentioned in ${input.sectionKey}`,
         body: input.body.slice(0, 240),
       });
+      const email = buildMentionEmail({ appUrl: config.APP_URL, planId: input.planId, sectionKey: input.sectionKey, commentBody: input.body });
+      emailRows.push({ tenantId: input.tenantId, recipientUserId: mentioned.id, toEmail: mentioned.email, subject: email.subject, bodyText: email.bodyText, emailType: 'mention_notification', metadata: { planId: input.planId, commentId: input.commentId, sectionKey: input.sectionKey, planUrl: email.planUrl } });
     }
   }
   if (input.parentCommentId) {
@@ -68,6 +74,7 @@ async function createCommentNotifications(input: {
     }
   }
   if (rows.length > 0) await db.insert(notifications).values(rows);
+  if (emailRows.length > 0) await db.insert(emailOutbox).values(emailRows);
 }
 
 async function getPlanWithSections(planId: string, tenantId: string) {
@@ -225,7 +232,7 @@ export async function planRoutes(app: FastifyInstance) {
     if (!plan) return reply.code(404).send({ type: 'about:blank', title: 'Not Found', status: 404, detail: 'Plan not found', instance: req.id });
     const mentionedEmails = extractMentionedEmails(body.body);
     const [comment] = await db.insert(planComments).values({ planId: id, createdBy: user.id, updatedBy: user.id, ...body, mentionedEmails }).returning();
-    await createCommentNotifications({ actorId: user.id, planId: id, commentId: comment.id, sectionKey: body.sectionKey, body: body.body, mentionedEmails, parentCommentId: body.parentCommentId });
+    await createCommentNotifications({ tenantId: user.tenantId, actorId: user.id, planId: id, commentId: comment.id, sectionKey: body.sectionKey, body: body.body, mentionedEmails, parentCommentId: body.parentCommentId });
     await audit(user.tenantId, user.id, 'plan_comment', comment.id, 'create', `Added comment on ${body.sectionKey}`, { planId: id, sectionKey: body.sectionKey, mentionedEmails, parentCommentId: body.parentCommentId });
     return reply.code(201).send(comment);
   });
