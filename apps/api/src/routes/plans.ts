@@ -1,12 +1,12 @@
-import { and, asc, eq } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { db } from '../db/client.js';
-import { approvals, auditLogs, drpPlans, drpSections, planComments } from '../db/schema/index.js';
+import { approvals, auditLogs, drpPlans, drpSections, notifications, planComments, users } from '../db/schema/index.js';
 import { ISO_22301_SECTIONS, defaultSectionContent } from '../drp/iso-template.js';
 import { renderDocxPayload, renderMarkdownPayload, renderPdfPayload } from '../drp/export-service.js';
 import { requireAuth, requireRole } from '../auth/auth-service.js';
-import { createCommentSchema, summarizeComments, updateCommentSchema } from '../comments/comment-service.js';
+import { createCommentSchema, extractMentionedEmails, summarizeComments, updateCommentSchema } from '../comments/comment-service.js';
 
 const createPlanSchema = z.object({
   title: z.string().min(3),
@@ -26,6 +26,48 @@ const updatePlanSchema = createPlanSchema.partial();
 
 async function audit(tenantId: string, actorId: string, entityType: string, entityId: string, action: string, summary: string, metadata: Record<string, unknown> = {}) {
   await db.insert(auditLogs).values({ tenantId, actorId, entityType, entityId, action, summary, metadata });
+}
+
+async function createCommentNotifications(input: {
+  actorId: string;
+  planId: string;
+  commentId: string;
+  sectionKey: string;
+  body: string;
+  mentionedEmails: string[];
+  parentCommentId?: string;
+}) {
+  const rows: Array<typeof notifications.$inferInsert> = [];
+  if (input.mentionedEmails.length > 0) {
+    const mentionedUsers = await db.select({ id: users.id, email: users.email }).from(users).where(inArray(users.email, input.mentionedEmails));
+    for (const mentioned of mentionedUsers) {
+      if (mentioned.id === input.actorId) continue;
+      rows.push({
+        userId: mentioned.id,
+        actorId: input.actorId,
+        planId: input.planId,
+        commentId: input.commentId,
+        type: 'mention',
+        title: `Mentioned in ${input.sectionKey}`,
+        body: input.body.slice(0, 240),
+      });
+    }
+  }
+  if (input.parentCommentId) {
+    const [parent] = await db.select().from(planComments).where(eq(planComments.id, input.parentCommentId)).limit(1);
+    if (parent?.createdBy && parent.createdBy !== input.actorId) {
+      rows.push({
+        userId: parent.createdBy,
+        actorId: input.actorId,
+        planId: input.planId,
+        commentId: input.commentId,
+        type: 'comment_reply',
+        title: `Reply in ${input.sectionKey}`,
+        body: input.body.slice(0, 240),
+      });
+    }
+  }
+  if (rows.length > 0) await db.insert(notifications).values(rows);
 }
 
 async function getPlanWithSections(planId: string, tenantId: string) {
@@ -141,8 +183,10 @@ export async function planRoutes(app: FastifyInstance) {
     const body = createCommentSchema.parse(req.body);
     const plan = await getPlanWithSections(id, user.tenantId);
     if (!plan) return reply.code(404).send({ type: 'about:blank', title: 'Not Found', status: 404, detail: 'Plan not found', instance: req.id });
-    const [comment] = await db.insert(planComments).values({ planId: id, createdBy: user.id, updatedBy: user.id, ...body }).returning();
-    await audit(user.tenantId, user.id, 'plan_comment', comment.id, 'create', `Added comment on ${body.sectionKey}`, { planId: id, sectionKey: body.sectionKey });
+    const mentionedEmails = extractMentionedEmails(body.body);
+    const [comment] = await db.insert(planComments).values({ planId: id, createdBy: user.id, updatedBy: user.id, ...body, mentionedEmails }).returning();
+    await createCommentNotifications({ actorId: user.id, planId: id, commentId: comment.id, sectionKey: body.sectionKey, body: body.body, mentionedEmails, parentCommentId: body.parentCommentId });
+    await audit(user.tenantId, user.id, 'plan_comment', comment.id, 'create', `Added comment on ${body.sectionKey}`, { planId: id, sectionKey: body.sectionKey, mentionedEmails, parentCommentId: body.parentCommentId });
     return reply.code(201).send(comment);
   });
 
@@ -157,6 +201,25 @@ export async function planRoutes(app: FastifyInstance) {
     if (!comment) return reply.code(404).send({ type: 'about:blank', title: 'Not Found', status: 404, detail: 'Comment not found', instance: req.id });
     await audit(user.tenantId, user.id, 'plan_comment', comment.id, 'update', `Updated comment ${comment.id}`, { planId: id, status: comment.status });
     return comment;
+  });
+
+  app.get('/api/v1/notifications', async (req) => {
+    const user = await requireAuth(req);
+    const rows = await db.select().from(notifications).where(eq(notifications.userId, user.id)).orderBy(desc(notifications.createdAt));
+    return { notifications: rows, unread: rows.filter((item) => item.status === 'unread').length };
+  });
+
+  app.patch('/api/v1/notifications/:id', async (req, reply) => {
+    const user = await requireAuth(req);
+    const { id } = z.object({ id: z.string().uuid() }).parse(req.params);
+    const body = z.object({ status: z.enum(['unread', 'read']) }).parse(req.body);
+    const [notification] = await db
+      .update(notifications)
+      .set({ status: body.status, readAt: body.status === 'read' ? new Date() : null })
+      .where(and(eq(notifications.id, id), eq(notifications.userId, user.id)))
+      .returning();
+    if (!notification) return reply.code(404).send({ type: 'about:blank', title: 'Not Found', status: 404, detail: 'Notification not found', instance: req.id });
+    return notification;
   });
 
   app.post('/api/v1/plans/:id/submit', async (req, reply) => {
