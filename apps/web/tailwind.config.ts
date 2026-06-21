@@ -67,7 +67,6 @@ const config: Config = {
       boxShadow: {
         soft: 'var(--shadow-soft)',
         lift: 'var(--shadow-lift)',
-        glow: 'var(--shadow-glow)',
       },
       keyframes: {
         'accordion-down': {
@@ -98,10 +97,10 @@ const config: Config = {
       animation: {
         'accordion-down': 'accordion-down 0.2s ease-out',
         'accordion-up': 'accordion-up 0.2s ease-out',
-        'fade-in': 'fade-in 380ms cubic-bezier(0.16, 1, 0.3, 1) both',
-        'fade-up': 'fade-up 420ms cubic-bezier(0.16, 1, 0.3, 1) both',
-        'pulse-soft': 'pulse-soft 2.4s cubic-bezier(0.4, 0, 0.6, 1) infinite',
-        shimmer: 'shimmer 2.6s linear infinite',
+        'fade-in': 'fade-in 220ms ease-out both',
+        'fade-up': 'fade-up 280ms ease-out both',
+        'pulse-soft': 'pulse-soft 2.4s ease-in-out infinite',
+        shimmer: 'shimmer 2s linear infinite',
       },
     },
   },

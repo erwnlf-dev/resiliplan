@@ -272,10 +272,6 @@ function Shell({ user, onUserUpdate, onLogout }: { user: User; onUserUpdate: (us
 
   return (
     <div className="relative min-h-screen">
-      <div className="pointer-events-none fixed inset-0 -z-10 overflow-hidden" aria-hidden>
-        <div className="absolute -top-40 -left-40 h-[36rem] w-[36rem] rounded-full bg-primary/15 blur-3xl anim-float" />
-        <div className="absolute top-1/2 -right-40 h-[32rem] w-[32rem] rounded-full bg-accent/12 blur-3xl anim-float-slow" />
-      </div>
 
       <header className="sticky top-0 z-30 border-b border-border/60 glass">
         <div className="container flex h-14 items-center justify-between gap-3">
@@ -289,10 +285,10 @@ function Shell({ user, onUserUpdate, onLogout }: { user: User; onUserUpdate: (us
               <Menu className="h-4 w-4" />
             </button>
             <Link to="/" className="flex items-center gap-2 group">
-              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-primary via-accent to-[hsl(280,80%,65%)] text-primary-foreground shadow-soft anim-pulse-glow">
+              <div className="flex h-8 w-8 items-center justify-center rounded-md bg-primary text-primary-foreground">
                 <FileText className="h-4 w-4" />
               </div>
-              <span className="font-bold tracking-tight anim-gradient-text text-base">ResiliPlan</span>
+              <span className="font-semibold tracking-tight text-foreground text-base">ResiliPlan</span>
               <span className="hidden rounded-full border border-border/60 bg-muted/60 px-2 py-0.5 text-xs font-medium text-muted-foreground md:inline-block">Phase 1 Core DRP</span>
             </Link>
           </div>
@@ -398,13 +394,7 @@ function LoginPage({ onLogin }: { onLogin: (user: User) => void }) {
   }
 
   return (
-    <div className="relative min-h-screen overflow-hidden">
-      {/* Decorative aurora blobs — fixed, behind content */}
-      <div className="pointer-events-none fixed inset-0 -z-10 overflow-hidden" aria-hidden>
-        <div className="absolute -top-32 -left-32 h-[36rem] w-[36rem] rounded-full bg-primary/25 blur-3xl anim-float" />
-        <div className="absolute top-1/3 -right-40 h-[32rem] w-[32rem] rounded-full bg-accent/20 blur-3xl anim-float-slow" />
-        <div className="absolute bottom-0 left-1/3 h-[28rem] w-[28rem] rounded-full bg-[hsl(280,80%,65%)]/15 blur-3xl anim-float" />
-      </div>
+    <div className="relative min-h-screen">
 
       <div className="flex min-h-screen items-center justify-center p-6 anim-fade-in">
         <div className="w-full max-w-5xl grid gap-10 lg:grid-cols-2 items-center">
@@ -413,7 +403,7 @@ function LoginPage({ onLogin }: { onLogin: (user: User) => void }) {
             <div className="inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">
               <Sparkles className="h-3 w-3" /> ISO 22301-aligned
             </div>
-            <h1 className="display display-glow">Build resilient DR plans, faster.</h1>
+            <h1 className="display">Build resilient DR plans, faster.</h1>
             <p className="text-base text-muted-foreground max-w-md">ResiliPlan is a self-hosted Disaster Recovery Plan builder with AI co-pilots, real-time collaboration, and ISO 22301 templates baked in.</p>
             <div className="flex flex-wrap gap-3 pt-2">
               <span className="badge border-primary/30 bg-primary/10 text-primary">14 ISO sections</span>
@@ -426,7 +416,7 @@ function LoginPage({ onLogin }: { onLogin: (user: User) => void }) {
           {/* Login form */}
           <form onSubmit={submit} className="surface-glow p-8 anim-fade-up" style={{ animationDelay: '120ms' }}>
             <div className="mb-6 flex items-center gap-3">
-              <div className="relative flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-primary via-accent to-[hsl(280,80%,65%)] text-primary-foreground shadow-soft anim-pulse-glow">
+              <div className="relative flex h-12 w-12 items-center justify-center rounded-md bg-primary text-primary-foreground">
                 <Lock className="h-5 w-5" />
               </div>
               <div>
@@ -751,7 +741,7 @@ function AIPlanGenerator({ onCreated }: { onCreated: (plan: Plan) => void }) {
   }
   return (
     <>
-      <div className="surface surface-lift border-primary/30 bg-gradient-to-br from-primary/5 via-accent/5 to-transparent p-5">
+      <div className="surface surface-lift border-primary/30 bg-muted p-5">
         <div className="flex items-center justify-between gap-4">
           <div>
             <h3 className="text-base font-semibold flex items-center gap-2">
