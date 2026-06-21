@@ -6,6 +6,8 @@
  */
 
 import type { FastifyInstance } from 'fastify';
+import { readdir, stat } from 'node:fs/promises';
+import { join } from 'node:path';
 import { count, eq } from 'drizzle-orm';
 import { config } from '../config/index.js';
 import { db, pool } from '../db/client.js';
@@ -132,5 +134,24 @@ export async function healthRoutes(app: FastifyInstance) {
       smtpConfigured,
       migrationsApplied: migrationResult.rows[0]?.count ?? 0,
     });
+  });
+
+  app.get('/api/v1/backups/summary', async (req) => {
+    await requireAuth(req);
+    const backupDir = process.env.BACKUP_DIR || join(process.cwd(), 'backups', 'daily');
+    try {
+      const files = await readdir(backupDir);
+      const dumps = await Promise.all(files.filter((file) => file.startsWith('resiliplan_') && file.endsWith('.dump')).map(async (file) => {
+        const fullPath = join(backupDir, file);
+        const info = await stat(fullPath);
+        return { file, path: fullPath, sizeBytes: info.size, modifiedAt: info.mtime.toISOString(), checksumFile: files.includes(`${file}.sha256`) };
+      }));
+      dumps.sort((a, b) => b.modifiedAt.localeCompare(a.modifiedAt));
+      const latest = dumps[0] ?? null;
+      const latestAgeHours = latest ? Math.round((Date.now() - new Date(latest.modifiedAt).getTime()) / 36_000) / 100 : null;
+      return { backupDir, count: dumps.length, latest, latestAgeHours, status: latest && latestAgeHours !== null && latestAgeHours <= 30 ? 'ok' : 'warn', backups: dumps.slice(0, 10) };
+    } catch (err) {
+      return { backupDir, count: 0, latest: null, latestAgeHours: null, status: 'missing', backups: [], error: err instanceof Error ? err.message : 'Unable to read backup directory' };
+    }
   });
 }

@@ -3,9 +3,10 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { config } from '../config/index.js';
 import { db } from '../db/client.js';
-import { approvals, auditLogs, drpPlans, drpSections, emailOutbox, notifications, planComments, planVersions, users } from '../db/schema/index.js';
+import { approvals, auditLogs, drpPlans, drpSections, emailOutbox, notifications, planComments, planEvidence, planVersions, users } from '../db/schema/index.js';
 import { ISO_22301_SECTIONS, defaultSectionContent } from '../drp/iso-template.js';
 import { renderDocxPayload, renderMarkdownPayload, renderPdfPayload } from '../drp/export-service.js';
+import { evaluateDrpQuality } from '../drp/quality-service.js';
 import { requireAuth, requireRole } from '../auth/auth-service.js';
 import { createCommentSchema, extractMentionedEmails, summarizeComments, updateCommentSchema } from '../comments/comment-service.js';
 import { buildMentionEmail } from '../email/email-service.js';
@@ -25,6 +26,14 @@ const createPlanSchema = z.object({
 });
 
 const updatePlanSchema = createPlanSchema.partial();
+
+const createEvidenceSchema = z.object({
+  sectionKey: z.string().optional(),
+  title: z.string().min(3),
+  evidenceUrl: z.string().min(3),
+  evidenceType: z.string().default('link'),
+  notes: z.string().optional(),
+});
 
 async function audit(tenantId: string, actorId: string, entityType: string, entityId: string, action: string, summary: string, metadata: Record<string, unknown> = {}) {
   await db.insert(auditLogs).values({ tenantId, actorId, entityType, entityId, action, summary, metadata });
@@ -172,6 +181,36 @@ export async function planRoutes(app: FastifyInstance) {
     if (!section) return reply.code(404).send({ type: 'about:blank', title: 'Not Found', status: 404, detail: 'Section not found', instance: req.id });
     await audit(user.tenantId, user.id, 'drp_section', section.id, 'update', `Updated section ${section.title}`, { planId: id, sectionKey });
     return section;
+  });
+
+  app.get('/api/v1/plans/:id/quality', async (req, reply) => {
+    const user = await requireAuth(req);
+    const { id } = z.object({ id: z.string().uuid() }).parse(req.params);
+    const plan = await getPlanWithSections(id, user.tenantId);
+    if (!plan) return reply.code(404).send({ type: 'about:blank', title: 'Not Found', status: 404, detail: 'Plan not found', instance: req.id });
+    const evidence = await db.select().from(planEvidence).where(eq(planEvidence.planId, id)).orderBy(asc(planEvidence.createdAt));
+    return evaluateDrpQuality({ ...plan, evidence });
+  });
+
+  app.get('/api/v1/plans/:id/evidence', async (req, reply) => {
+    const user = await requireAuth(req);
+    const { id } = z.object({ id: z.string().uuid() }).parse(req.params);
+    const plan = await getPlanWithSections(id, user.tenantId);
+    if (!plan) return reply.code(404).send({ type: 'about:blank', title: 'Not Found', status: 404, detail: 'Plan not found', instance: req.id });
+    const rows = await db.select().from(planEvidence).where(eq(planEvidence.planId, id)).orderBy(desc(planEvidence.createdAt));
+    return { evidence: rows };
+  });
+
+  app.post('/api/v1/plans/:id/evidence', async (req, reply) => {
+    const user = await requireAuth(req);
+    requireRole(user, ['admin', 'coordinator', 'owner']);
+    const { id } = z.object({ id: z.string().uuid() }).parse(req.params);
+    const body = createEvidenceSchema.parse(req.body);
+    const plan = await getPlanWithSections(id, user.tenantId);
+    if (!plan) return reply.code(404).send({ type: 'about:blank', title: 'Not Found', status: 404, detail: 'Plan not found', instance: req.id });
+    const [created] = await db.insert(planEvidence).values({ planId: id, sectionKey: body.sectionKey, title: body.title, evidenceUrl: body.evidenceUrl, evidenceType: body.evidenceType, notes: body.notes ?? '', createdBy: user.id }).returning();
+    await audit(user.tenantId, user.id, 'plan_evidence', created.id, 'create', `Added evidence ${created.title}`, { planId: id, sectionKey: created.sectionKey });
+    return reply.code(201).send(created);
   });
 
   app.get('/api/v1/plans/:id/versions', async (req, reply) => {

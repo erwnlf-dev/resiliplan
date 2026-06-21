@@ -19,7 +19,8 @@ describe('tenant isolation regression guards', () => {
   it('keeps audit trail and settings APIs scoped to the authenticated tenant', () => {
     const auditRoute = src('routes', 'audit.ts');
     const settingsRoute = src('routes', 'settings.ts');
-    expect(auditRoute).toContain('eq(auditLogs.tenantId, user.tenantId)');
+    expect(auditRoute).toContain('auditFilters(user.tenantId, query)');
+    expect(auditRoute).toContain('eq(auditLogs.tenantId, tenantId)');
     expect(settingsRoute).toContain('eq(tenants.id, user.tenantId)');
   });
 

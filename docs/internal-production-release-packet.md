@@ -14,6 +14,10 @@ Prepare ResiliPlan for controlled internal use at PT Datacomm Diangraha while ke
 - Production readiness API/UI checks.
 - Health/readiness endpoints and monitoring counters.
 - Audit logs for key create/update/approval/outbox actions.
+- DRP quality score for completeness/readiness review.
+- Evidence attachment links per plan/section.
+- Searchable/exportable audit trail.
+- Backup dashboard reading latest daily dump/checksum state.
 
 ## Confirmed internal launch decisions
 - Access URL: direct VM IP and port for now.

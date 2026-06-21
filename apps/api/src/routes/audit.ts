@@ -9,23 +9,30 @@ const auditQuerySchema = z.object({
   q: z.string().trim().optional(),
   entityType: z.string().trim().optional(),
   action: z.string().trim().optional(),
-  limit: z.coerce.number().int().min(1).max(100).default(50),
+  limit: z.coerce.number().int().min(1).max(500).default(50),
 });
+
+function csvEscape(value: unknown): string {
+  const text = value instanceof Date ? value.toISOString() : typeof value === 'object' && value !== null ? JSON.stringify(value) : String(value ?? '');
+  return `"${text.replace(/"/g, '""')}"`;
+}
+
+function auditFilters(tenantId: string, query: z.infer<typeof auditQuerySchema>) {
+  const filters = [eq(auditLogs.tenantId, tenantId)];
+  if (query.entityType) filters.push(eq(auditLogs.entityType, query.entityType));
+  if (query.action) filters.push(eq(auditLogs.action, query.action));
+  if (query.q) {
+    const term = `%${query.q}%`;
+    filters.push(or(ilike(auditLogs.summary, term), ilike(auditLogs.entityType, term), ilike(auditLogs.action, term), ilike(auditLogs.entityId, term))!);
+  }
+  return filters;
+}
 
 export async function auditRoutes(app: FastifyInstance) {
   app.get('/api/v1/audit-trail', async (req) => {
     const user = await requireAuth(req);
     requireRole(user, ['admin', 'coordinator']);
     const query = auditQuerySchema.parse(req.query);
-    const filters = [eq(auditLogs.tenantId, user.tenantId)];
-
-    if (query.entityType) filters.push(eq(auditLogs.entityType, query.entityType));
-    if (query.action) filters.push(eq(auditLogs.action, query.action));
-    if (query.q) {
-      const term = `%${query.q}%`;
-      filters.push(or(ilike(auditLogs.summary, term), ilike(auditLogs.entityType, term), ilike(auditLogs.action, term), ilike(auditLogs.entityId, term))!);
-    }
-
     const rows = await db
       .select({
         id: auditLogs.id,
@@ -41,10 +48,26 @@ export async function auditRoutes(app: FastifyInstance) {
       })
       .from(auditLogs)
       .leftJoin(users, eq(users.id, auditLogs.actorId))
-      .where(and(...filters))
+      .where(and(...auditFilters(user.tenantId, query)))
       .orderBy(desc(auditLogs.createdAt))
       .limit(query.limit);
 
     return { auditLogs: rows };
+  });
+
+  app.get('/api/v1/audit-trail.csv', async (req, reply) => {
+    const user = await requireAuth(req);
+    requireRole(user, ['admin', 'coordinator']);
+    const query = auditQuerySchema.parse(req.query);
+    const rows = await db
+      .select({ id: auditLogs.id, actorEmail: users.email, entityType: auditLogs.entityType, entityId: auditLogs.entityId, action: auditLogs.action, summary: auditLogs.summary, metadata: auditLogs.metadata, createdAt: auditLogs.createdAt })
+      .from(auditLogs)
+      .leftJoin(users, eq(users.id, auditLogs.actorId))
+      .where(and(...auditFilters(user.tenantId, query)))
+      .orderBy(desc(auditLogs.createdAt))
+      .limit(query.limit);
+    const header = ['created_at', 'actor_email', 'entity_type', 'entity_id', 'action', 'summary', 'metadata'];
+    const csv = [header.join(','), ...rows.map((row) => [row.createdAt, row.actorEmail ?? 'system', row.entityType, row.entityId, row.action, row.summary, row.metadata].map(csvEscape).join(','))].join('\n');
+    return reply.type('text/csv').header('Content-Disposition', 'attachment; filename="audit-trail.csv"').send(csv);
   });
 }

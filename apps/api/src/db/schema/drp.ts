@@ -153,9 +153,31 @@ export const auditLogs = pgTable(
   }),
 );
 
+export const planEvidence = pgTable(
+  'plan_evidence',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    planId: uuid('plan_id')
+      .references(() => drpPlans.id, { onDelete: 'cascade' })
+      .notNull(),
+    sectionKey: varchar('section_key', { length: 120 }),
+    title: text('title').notNull(),
+    evidenceUrl: text('evidence_url').notNull(),
+    evidenceType: varchar('evidence_type', { length: 80 }).default('link').notNull(),
+    notes: text('notes').default('').notNull(),
+    createdBy: uuid('created_by').references(() => users.id, { onDelete: 'set null' }),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+  },
+  (table) => ({
+    planIdx: index('plan_evidence_plan_id_idx').on(table.planId),
+    sectionIdx: index('plan_evidence_section_key_idx').on(table.planId, table.sectionKey),
+  }),
+);
+
 export type Session = typeof sessions.$inferSelect;
 export type DrpPlan = typeof drpPlans.$inferSelect;
 export type NewDrpPlan = typeof drpPlans.$inferInsert;
 export type DrpSection = typeof drpSections.$inferSelect;
 export type PlanVersion = typeof planVersions.$inferSelect;
 export type AuditLog = typeof auditLogs.$inferSelect;
+export type PlanEvidence = typeof planEvidence.$inferSelect;
