@@ -33,7 +33,8 @@ type MonitoringSummary = { status: string; timestamp: string; counters: { plans:
 type BillingSummary = { subscription: { planCode: string; status: string; seatsLimit: number; plansLimit: number; aiRequestsLimit: number; currentPeriodEnd: string }; usage: Record<string, number> };
 type EmailOutboxItem = { id: string; toEmail: string; subject: string; bodyText: string; emailType: string; status: 'queued' | 'sent' | 'failed' | 'cancelled'; lastError?: string | null; queuedAt: string };
 type ReadinessSummary = { status: string; failed: number; warnings: number; checks: Array<{ key: string; label: string; status: 'pass' | 'warn' | 'fail'; detail: string }> };
-type TenantSettings = { smtp: { mode: 'outbox_only' | 'smtp'; host?: string; port?: number; from?: string; configuredFromDashboard?: boolean }; internalAccess: { mode: 'ip_port'; securityGroupRestricted: boolean; adminPolicy: string }; backup: { frequency: 'daily'; retentionDays: number } };
+type TenantSettings = { smtp: { mode: 'outbox_only' | 'smtp'; host?: string; port?: number; from?: string; configuredFromDashboard?: boolean }; internalAccess: { mode: 'ip_port'; securityGroupRestricted: boolean; adminPolicy: string }; backup: { frequency: 'daily'; retentionDays: number }; sso: { enabled: boolean; provider: 'oidc' | 'azure_ad'; issuerUrl?: string; clientId?: string; redirectUri?: string } };
+type AuditLogItem = { id: string; actorId?: string | null; actorEmail?: string | null; entityType: string; entityId: string; action: string; summary: string; metadata: Record<string, unknown>; appendOnly: boolean; createdAt: string };
 
 const API = import.meta.env.VITE_API_URL ?? `${window.location.protocol}//${window.location.hostname}:3001`;
 const COLLAB_WS = import.meta.env.VITE_COLLAB_WS_URL ?? `ws://${window.location.hostname}:3002`;
@@ -80,9 +81,19 @@ export function App() {
   }, []);
 
   if (authLoading) return <Centered>Loading ResiliPlan...</Centered>;
-  if (!user) return <LoginPage onLogin={setUser} />;
+  if (!user) return <AuthRoutes onLogin={setUser} />;
 
   return <Shell user={user} onUserUpdate={setUser} onLogout={() => setUser(null)} />;
+}
+
+function AuthRoutes({ onLogin }: { onLogin: (user: User) => void }) {
+  return (
+    <Routes>
+      <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+      <Route path="/reset-password" element={<ResetPasswordPage />} />
+      <Route path="*" element={<LoginPage onLogin={onLogin} />} />
+    </Routes>
+  );
 }
 
 function Shell({ user, onUserUpdate, onLogout }: { user: User; onUserUpdate: (user: User) => void; onLogout: () => void }) {
@@ -119,6 +130,7 @@ function Shell({ user, onUserUpdate, onLogout }: { user: User; onUserUpdate: (us
           <NavLink to="/monitoring" icon={<Activity className="h-4 w-4" />}>Monitoring</NavLink>
           <NavLink to="/billing" icon={<CreditCard className="h-4 w-4" />}>Billing</NavLink>
           <NavLink to="/email-outbox" icon={<Mail className="h-4 w-4" />}>Email Outbox</NavLink>
+          <NavLink to="/audit-trail" icon={<FileText className="h-4 w-4" />}>Audit Trail</NavLink>
           <NavLink to="/readiness" icon={<CheckCircle2 className="h-4 w-4" />}>Readiness</NavLink>
           <NavLink to="/settings" icon={<Settings className="h-4 w-4" />}>Settings</NavLink>
           <NavLink to="/security" icon={<Lock className="h-4 w-4" />}>Security</NavLink>
@@ -136,6 +148,7 @@ function Shell({ user, onUserUpdate, onLogout }: { user: User; onUserUpdate: (us
           <Route path="/monitoring" element={<MonitoringPage />} />
           <Route path="/billing" element={<BillingPage />} />
           <Route path="/email-outbox" element={<EmailOutboxPage />} />
+          <Route path="/audit-trail" element={<AuditTrailPage />} />
           <Route path="/readiness" element={<ReadinessPage />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="/security" element={<SecurityPage user={user} onUserUpdate={onUserUpdate} />} />
@@ -171,6 +184,68 @@ function LoginPage({ onLogin }: { onLogin: (user: User) => void }) {
     <label className="text-sm font-medium">Password</label><input value={password} onChange={(e) => setPassword(e.target.value)} type="password" className="mb-4 mt-1 w-full rounded-md border px-3 py-2" />
     <label className="text-sm font-medium">TOTP code <span className="text-muted-foreground">(if MFA enabled)</span></label><input value={totp} onChange={(e) => setTotp(e.target.value)} inputMode="numeric" className="mb-6 mt-1 w-full rounded-md border px-3 py-2" />
     <button disabled={loading} className="w-full rounded-md bg-primary px-4 py-2 font-medium text-white disabled:opacity-50">{loading ? 'Signing in...' : 'Sign in'}</button>
+    <div className="mt-4 text-center text-sm"><Link to="/forgot-password" className="text-primary hover:underline">Forgot password?</Link></div>
+  </form></div>;
+}
+
+function ForgotPasswordPage() {
+  const [email, setEmail] = useState('');
+  const [message, setMessage] = useState('');
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  async function submit(event: React.FormEvent) {
+    event.preventDefault();
+    setLoading(true); setError(''); setMessage('');
+    try {
+      await api('/api/v1/auth/password-reset/request', { method: 'POST', body: JSON.stringify({ email }) });
+      setMessage('If your email exists in our system, a password reset link has been queued. Check Email Outbox in dashboard.');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to request reset');
+    } finally { setLoading(false); }
+  }
+
+  return <div className="flex min-h-screen items-center justify-center bg-slate-50 p-6"><form onSubmit={submit} className="w-full max-w-md rounded-xl border bg-white p-8 shadow-sm">
+    <div className="mb-6 flex items-center gap-2"><div className="rounded-lg bg-primary p-2 text-white"><Mail className="h-5 w-5" /></div><div><h1 className="text-xl font-semibold">Reset Password</h1><p className="text-sm text-muted-foreground">Request password reset link</p></div></div>
+    {error && <div className="mb-4 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div>}
+    {message && <div className="mb-4 rounded-md border border-green-200 bg-green-50 p-3 text-sm text-green-700">{message}</div>}
+    <label className="text-sm font-medium">Email</label><input value={email} onChange={(e) => setEmail(e.target.value)} type="email" required className="mb-6 mt-1 w-full rounded-md border px-3 py-2" />
+    <button disabled={loading} className="w-full rounded-md bg-primary px-4 py-2 font-medium text-white disabled:opacity-50">{loading ? 'Requesting...' : 'Send reset link'}</button>
+    <div className="mt-4 text-center text-sm"><Link to="/" className="text-primary hover:underline">← Back to login</Link></div>
+  </form></div>;
+}
+
+function ResetPasswordPage() {
+  const [token, setToken] = useState('');
+  const [password, setPassword] = useState('');
+  const [confirm, setConfirm] = useState('');
+  const [message, setMessage] = useState('');
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const t = params.get('token');
+    if (t) setToken(t);
+  }, []);
+
+  async function submit(event: React.FormEvent) {
+    event.preventDefault();
+    if (password !== confirm) { setError('Passwords do not match'); return; }
+    setLoading(true); setError(''); setMessage('');
+    try {
+      await api('/api/v1/auth/password-reset/confirm', { method: 'POST', body: JSON.stringify({ token, newPassword: password }) });
+      setMessage('Password reset successful. You can now login with your new password.');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to reset password');
+    } finally { setLoading(false); }
+  }
+
+  return <div className="flex min-h-screen items-center justify-center bg-slate-50 p-6"><form onSubmit={submit} className="w-full max-w-md rounded-xl border bg-white p-8 shadow-sm">
+    <div className="mb-6 flex items-center gap-2"><div className="rounded-lg bg-primary p-2 text-white"><Lock className="h-5 w-5" /></div><div><h1 className="text-xl font-semibold">Set New Password</h1><p className="text-sm text-muted-foreground">Create a new password</p></div></div>
+    {error && <div className="mb-4 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div>}
+    {message && <><div className="mb-4 rounded-md border border-green-200 bg-green-50 p-3 text-sm text-green-700">{message}</div><Link to="/" className="block text-center text-sm text-primary hover:underline">← Go to login</Link></>}
+    {!message && <><label className="text-sm font-medium">New password</label><input value={password} onChange={(e) => setPassword(e.target.value)} type="password" required minLength={12} className="mb-4 mt-1 w-full rounded-md border px-3 py-2" /><label className="text-sm font-medium">Confirm password</label><input value={confirm} onChange={(e) => setConfirm(e.target.value)} type="password" required minLength={12} className="mb-6 mt-1 w-full rounded-md border px-3 py-2" /><button disabled={loading} className="w-full rounded-md bg-primary px-4 py-2 font-medium text-white disabled:opacity-50">{loading ? 'Resetting...' : 'Reset password'}</button></>}
   </form></div>;
 }
 
@@ -518,6 +593,32 @@ function EmailOutboxPage() {
   return <RegisterPage title="Email Outbox" subtitle={`${queued} queued draft email(s). Outbound SMTP is approval/config gated.`} error={error}>{emails.length === 0 ? <div className="rounded-lg border bg-card p-6 text-sm text-muted-foreground">No queued emails.</div> : <div className="space-y-3">{emails.map((email) => <div key={email.id} className="rounded-lg border bg-card p-4 text-sm"><div className="flex items-start justify-between gap-4"><div><div className="font-medium">{email.subject}</div><div className="text-muted-foreground">{email.emailType} · to {email.toEmail} · {new Date(email.queuedAt).toLocaleString()}</div><pre className="mt-3 max-h-40 overflow-auto whitespace-pre-wrap rounded-md bg-muted/40 p-3 text-xs">{email.bodyText}</pre>{email.lastError && <p className="mt-2 text-xs text-red-600">Last error: {email.lastError}</p>}</div><div className="flex shrink-0 flex-col gap-2"><StatusBadge status={email.status} />{email.status === 'queued' && <><button onClick={() => updateStatus(email.id, 'sent')} className="rounded-md border px-3 py-2 text-xs">Mark sent</button><button onClick={() => updateStatus(email.id, 'cancelled')} className="rounded-md border px-3 py-2 text-xs">Cancel</button></>}</div></div></div>)}</div>}</RegisterPage>;
 }
 
+function AuditTrailPage() {
+  const [items, setItems] = useState<AuditLogItem[]>([]);
+  const [q, setQ] = useState('');
+  const [entityType, setEntityType] = useState('');
+  const [action, setAction] = useState('');
+  const [limit, setLimit] = useState(50);
+  const [error, setError] = useState('');
+  const entityTypes = ['drp_plan', 'drp_section', 'plan_version', 'plan_comment', 'bia_entry', 'service_asset', 'service_risk', 'recovery_drill', 'email_outbox', 'tenant_settings', 'user'];
+  const actions = ['create', 'update', 'submit', 'approve', 'rollback', 'queue', 'sent', 'cancelled', 'failed'];
+  async function load() {
+    try {
+      setError('');
+      const params = new URLSearchParams();
+      if (q.trim()) params.set('q', q.trim());
+      if (entityType) params.set('entityType', entityType);
+      if (action) params.set('action', action);
+      params.set('limit', String(limit));
+      const data = await api<{ auditLogs: AuditLogItem[] }>(`/api/v1/audit-trail?${params.toString()}`);
+      setItems(data.auditLogs);
+    } catch (err) { setError(err instanceof Error ? err.message : 'Failed to load audit trail'); }
+  }
+  useEffect(() => { void load(); }, []);
+  function submit(event: React.FormEvent) { event.preventDefault(); void load(); }
+  return <RegisterPage title="Audit Trail" subtitle="Tenant-scoped append-only activity log for DRP, BIA, users, settings, and outbound queue actions." error={error}><form onSubmit={submit} className="grid gap-3 rounded-lg border bg-card p-4 md:grid-cols-5"><Input name="q" label="Search" placeholder="summary, action, entity id" value={q} onChange={(e) => setQ(e.target.value)} /><label className="text-sm font-medium">Entity<select value={entityType} onChange={(e) => setEntityType(e.target.value)} className="mt-1 w-full rounded-md border px-3 py-2"><option value="">All entities</option>{entityTypes.map((item) => <option key={item} value={item}>{item}</option>)}</select></label><label className="text-sm font-medium">Action<select value={action} onChange={(e) => setAction(e.target.value)} className="mt-1 w-full rounded-md border px-3 py-2"><option value="">All actions</option>{actions.map((item) => <option key={item} value={item}>{item}</option>)}</select></label><Input name="limit" label="Limit" type="number" min="1" max="100" value={limit} onChange={(e) => setLimit(Number(e.target.value) || 50)} /><div className="flex items-end"><button className="w-full rounded-md bg-primary px-4 py-2 text-sm text-white">Search</button></div></form><div className="space-y-2">{items.length === 0 ? <div className="rounded-lg border bg-card p-6 text-sm text-muted-foreground">No audit records found.</div> : items.map((item) => <div key={item.id} className="rounded-lg border bg-card p-4 text-sm"><div className="flex items-start justify-between gap-4"><div><div className="font-medium">{item.summary}</div><div className="text-muted-foreground">{item.entityType} · {item.action} · {item.actorEmail ?? 'system'} · {new Date(item.createdAt).toLocaleString()}</div><div className="mt-1 text-xs text-muted-foreground">Entity ID: {item.entityId}</div>{Object.keys(item.metadata ?? {}).length > 0 && <pre className="mt-3 max-h-28 overflow-auto whitespace-pre-wrap rounded-md bg-muted/40 p-3 text-xs">{JSON.stringify(item.metadata, null, 2)}</pre>}</div><StatusBadge status={item.appendOnly ? 'append-only' : 'mutable'} /></div></div>)}</div></RegisterPage>;
+}
+
 function ReadinessPage() {
   const [summary, setSummary] = useState<ReadinessSummary | null>(null);
   const [error, setError] = useState('');
@@ -540,13 +641,14 @@ function SettingsPage() {
         smtp: { mode: data.get('smtpMode') as 'outbox_only' | 'smtp', host: String(data.get('smtpHost') || '') || undefined, port: Number(data.get('smtpPort') || 0) || undefined, from: String(data.get('smtpFrom') || '') || undefined, configuredFromDashboard: true },
         internalAccess: { mode: 'ip_port', securityGroupRestricted: data.get('securityGroupRestricted') === 'on', adminPolicy: String(data.get('adminPolicy') || 'single_admin_erwin_only') },
         backup: { frequency: 'daily', retentionDays: Number(data.get('retentionDays') || 14) },
+        sso: { enabled: data.get('ssoEnabled') === 'on', provider: data.get('ssoProvider') as 'oidc' | 'azure_ad', issuerUrl: String(data.get('ssoIssuerUrl') || '') || undefined, clientId: String(data.get('ssoClientId') || '') || undefined, redirectUri: String(data.get('ssoRedirectUri') || '') || undefined },
       };
       const updated = await api<{ settings: TenantSettings }>('/api/v1/settings', { method: 'PATCH', body: JSON.stringify(payload) });
       setSettings(updated.settings); setMessage('Settings saved.');
     } catch (err) { setError(err instanceof Error ? err.message : 'Save settings failed'); }
   }
   if (!settings) return <RegisterPage title="Settings" subtitle="Internal production posture." error={error}><Centered>Loading settings...</Centered></RegisterPage>;
-  return <RegisterPage title="Settings" subtitle="Internal office access via IP:port; SMTP can be configured later from this dashboard." error={error}>{message && <div className="rounded-md border border-green-200 bg-green-50 p-3 text-sm text-green-700">{message}</div>}<form onSubmit={save} className="grid gap-4 rounded-lg border bg-card p-4 md:grid-cols-2"><label className="text-sm font-medium">SMTP mode<select name="smtpMode" defaultValue={settings.smtp.mode} className="mt-1 w-full rounded-md border px-3 py-2"><option value="outbox_only">Outbox only for now</option><option value="smtp">SMTP configured</option></select></label><Input name="smtpHost" label="SMTP host" defaultValue={settings.smtp.host ?? ''} /><Input name="smtpPort" label="SMTP port" type="number" defaultValue={settings.smtp.port ? String(settings.smtp.port) : ''} /><Input name="smtpFrom" label="SMTP from" defaultValue={settings.smtp.from ?? ''} /><label className="text-sm font-medium">Access model<input name="accessMode" value="IP and port" disabled className="mt-1 w-full rounded-md border bg-muted px-3 py-2" /></label><label className="flex items-center gap-2 text-sm font-medium"><input name="securityGroupRestricted" type="checkbox" defaultChecked={settings.internalAccess.securityGroupRestricted} /> Restricted by VM security group</label><Input name="adminPolicy" label="Admin policy" defaultValue={settings.internalAccess.adminPolicy} /><Input name="retentionDays" label="Backup retention days" type="number" defaultValue={String(settings.backup.retentionDays)} /><div className="md:col-span-2"><button className="rounded-md bg-primary px-4 py-2 text-sm text-white">Save settings</button></div></form></RegisterPage>;
+  return <RegisterPage title="Settings" subtitle="Internal office access via IP:port; SMTP can be configured later from this dashboard." error={error}>{message && <div className="rounded-md border border-green-200 bg-green-50 p-3 text-sm text-green-700">{message}</div>}<form onSubmit={save} className="grid gap-4 rounded-lg border bg-card p-4 md:grid-cols-2"><label className="text-sm font-medium">SMTP mode<select name="smtpMode" defaultValue={settings.smtp.mode} className="mt-1 w-full rounded-md border px-3 py-2"><option value="outbox_only">Outbox only for now</option><option value="smtp">SMTP configured</option></select></label><Input name="smtpHost" label="SMTP host" defaultValue={settings.smtp.host ?? ''} /><Input name="smtpPort" label="SMTP port" type="number" defaultValue={settings.smtp.port ? String(settings.smtp.port) : ''} /><Input name="smtpFrom" label="SMTP from" defaultValue={settings.smtp.from ?? ''} /><label className="text-sm font-medium">Access model<input name="accessMode" value="IP and port" disabled className="mt-1 w-full rounded-md border bg-muted px-3 py-2" /></label><label className="flex items-center gap-2 text-sm font-medium"><input name="securityGroupRestricted" type="checkbox" defaultChecked={settings.internalAccess.securityGroupRestricted} /> Restricted by VM security group</label><Input name="adminPolicy" label="Admin policy" defaultValue={settings.internalAccess.adminPolicy} /><Input name="retentionDays" label="Backup retention days" type="number" defaultValue={String(settings.backup.retentionDays)} /><div className="md:col-span-2 border-t pt-4"><h2 className="font-semibold">SSO / OIDC scaffold</h2><p className="text-xs text-muted-foreground">Disabled by default. Fill when Azure AD/OIDC details are ready.</p></div><label className="flex items-center gap-2 text-sm font-medium"><input name="ssoEnabled" type="checkbox" defaultChecked={settings.sso.enabled} /> Enable SSO after credentials are validated</label><label className="text-sm font-medium">Provider<select name="ssoProvider" defaultValue={settings.sso.provider} className="mt-1 w-full rounded-md border px-3 py-2"><option value="oidc">Generic OIDC</option><option value="azure_ad">Azure AD</option></select></label><Input name="ssoIssuerUrl" label="Issuer URL" defaultValue={settings.sso.issuerUrl ?? ''} /><Input name="ssoClientId" label="Client ID" defaultValue={settings.sso.clientId ?? ''} /><Input name="ssoRedirectUri" label="Redirect URI" defaultValue={settings.sso.redirectUri ?? ''} /><div className="md:col-span-2"><button className="rounded-md bg-primary px-4 py-2 text-sm text-white">Save settings</button></div></form></RegisterPage>;
 }
 
 function UsersPage() {

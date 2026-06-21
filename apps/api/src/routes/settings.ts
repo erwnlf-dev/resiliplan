@@ -22,6 +22,13 @@ const settingsSchema = z.object({
     frequency: z.literal('daily').default('daily'),
     retentionDays: z.number().int().positive().default(14),
   }).default({ frequency: 'daily', retentionDays: 14 }),
+  sso: z.object({
+    enabled: z.boolean().default(false),
+    provider: z.enum(['oidc', 'azure_ad']).default('oidc'),
+    issuerUrl: z.string().optional(),
+    clientId: z.string().optional(),
+    redirectUri: z.string().optional(),
+  }).default({ enabled: false, provider: 'oidc' }),
 });
 
 export async function settingsRoutes(app: FastifyInstance) {

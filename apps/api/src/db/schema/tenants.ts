@@ -26,6 +26,13 @@ export const tenants = pgTable('tenants', {
         frequency?: 'daily';
         retentionDays?: number;
       };
+      sso?: {
+        enabled?: boolean;
+        provider?: 'oidc' | 'azure_ad';
+        issuerUrl?: string;
+        clientId?: string;
+        redirectUri?: string;
+      };
     }>()
     .default({})
     .notNull(),
