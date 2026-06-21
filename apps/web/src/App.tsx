@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, NavLink as RouterNavLink, Route, Routes, useLocation, useNavigate, useParams } from 'react-router-dom';
-import { Activity, AlertTriangle, Bell, Calendar, CheckCircle2, ChevronRight, Compass, CreditCard, Download, FileText, Home, ListOrdered, Lock, LogOut, Mail, Moon, Save, Send, Server, Settings, Sparkles, Sun, TestTube2, Upload, Users, Wand2 } from 'lucide-react';
+import { Activity, AlertTriangle, Bell, Calendar, CheckCircle2, ChevronRight, Compass, CreditCard, Download, FileText, Home, ListOrdered, Lock, LogOut, Mail, Menu, Moon, Save, Send, Server, Settings, Sparkles, Sun, TestTube2, Upload, Users, Wand2, X } from 'lucide-react';
 import {
   ActivityTimeline,
   Avatar,
@@ -214,6 +214,43 @@ function Shell({ user, onUserUpdate, onLogout }: { user: User; onUserUpdate: (us
     onLogout();
   }
   const [commandOpen, setCommandOpen] = useState(false);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const location = useLocation();
+  useEffect(() => { setMobileNavOpen(false); }, [location.pathname]);
+
+  const SidebarNav = (
+    <nav className="surface surface-lift space-y-3 p-3 max-h-[calc(100vh-6rem)] overflow-y-auto md:sticky md:top-20">
+      {SIDEBAR_GROUPS.map((group) => (
+        <div key={group.label} className="space-y-0.5">
+          <p className="px-2 pt-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">{group.label}</p>
+          {group.items.map((item) => (
+            <RouterNavLink
+              key={item.to}
+              to={item.to}
+              end={item.to === '/'}
+              className={({ isActive }) =>
+                `group relative flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium transition-all duration-200 ${
+                  isActive
+                    ? 'bg-primary/15 text-foreground'
+                    : 'text-muted-foreground hover:bg-muted hover:text-foreground hover:translate-x-0.5'
+                }`
+              }
+            >
+              {({ isActive }) => (
+                <>
+                  {isActive && <span className="absolute left-0 top-1/2 h-5 w-0.5 -translate-y-1/2 rounded-r-full bg-primary" />}
+                  <span className={`transition-colors ${isActive ? 'text-primary' : 'text-muted-foreground/70 group-hover:text-foreground'}`}>
+                    {item.icon}
+                  </span>
+                  <span>{item.label}</span>
+                </>
+              )}
+            </RouterNavLink>
+          ))}
+        </div>
+      ))}
+    </nav>
+  );
 
   return (
     <div className="relative min-h-screen">
@@ -224,62 +261,45 @@ function Shell({ user, onUserUpdate, onLogout }: { user: User; onUserUpdate: (us
 
       <header className="sticky top-0 z-30 border-b border-border/60 glass">
         <div className="container flex h-14 items-center justify-between gap-3">
-          <Link to="/" className="flex items-center gap-2 group">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-primary via-accent to-[hsl(280,80%,65%)] text-primary-foreground shadow-soft anim-pulse-glow">
-              <FileText className="h-4 w-4" />
-            </div>
-            <span className="font-bold tracking-tight anim-gradient-text text-base">ResiliPlan</span>
-            <span className="hidden rounded-full border border-border/60 bg-muted/60 px-2 py-0.5 text-xs font-medium text-muted-foreground md:inline-block">Phase 1 Core DRP</span>
-          </Link>
           <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setMobileNavOpen(true)}
+              className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground md:hidden"
+              aria-label="Open navigation"
+            >
+              <Menu className="h-4 w-4" />
+            </button>
+            <Link to="/" className="flex items-center gap-2 group">
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-primary via-accent to-[hsl(280,80%,65%)] text-primary-foreground shadow-soft anim-pulse-glow">
+                <FileText className="h-4 w-4" />
+              </div>
+              <span className="font-bold tracking-tight anim-gradient-text text-base">ResiliPlan</span>
+              <span className="hidden rounded-full border border-border/60 bg-muted/60 px-2 py-0.5 text-xs font-medium text-muted-foreground md:inline-block">Phase 1 Core DRP</span>
+            </Link>
+          </div>
+          <div className="flex items-center gap-1.5 sm:gap-2">
             <CommandTrigger onClick={() => setCommandOpen(true)} />
             <ThemeToggle />
-            <div className="flex items-center gap-2 rounded-lg border border-border/60 bg-card/60 px-2 py-1 backdrop-blur-sm">
+            <div className="flex items-center gap-2 rounded-lg border border-border/60 bg-card/60 px-1.5 py-1 backdrop-blur-sm sm:px-2">
               <Avatar name={user.name} size="sm" status="online" />
               <div className="hidden text-xs sm:block">
                 <div className="font-medium leading-4">{user.name}</div>
                 <div className="text-muted-foreground leading-3 capitalize">{user.role}</div>
               </div>
             </div>
-            <Button variant="ghost" size="sm" onClick={logout} leftIcon={<LogOut className="h-3.5 w-3.5" />}>
+            <Button variant="ghost" size="sm" onClick={logout} className="hidden sm:inline-flex" leftIcon={<LogOut className="h-3.5 w-3.5" />}>
               Logout
+            </Button>
+            <Button variant="ghost" size="sm" onClick={logout} className="sm:hidden" aria-label="Logout">
+              <LogOut className="h-3.5 w-3.5" />
             </Button>
           </div>
         </div>
       </header>
       <div className="container flex gap-6 py-6">
-        <aside className="w-60 shrink-0">
-          <nav className="surface surface-lift sticky top-20 space-y-3 p-3 max-h-[calc(100vh-6rem)] overflow-y-auto">
-            {SIDEBAR_GROUPS.map((group) => (
-              <div key={group.label} className="space-y-0.5">
-                <p className="px-2 pt-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">{group.label}</p>
-                {group.items.map((item) => (
-                  <RouterNavLink
-                    key={item.to}
-                    to={item.to}
-                    end={item.to === '/'}
-                    className={({ isActive }) =>
-                      `group relative flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium transition-all duration-200 ${
-                        isActive
-                          ? 'bg-primary/15 text-foreground'
-                          : 'text-muted-foreground hover:bg-muted hover:text-foreground hover:translate-x-0.5'
-                      }`
-                    }
-                  >
-                    {({ isActive }) => (
-                      <>
-                        {isActive && <span className="absolute left-0 top-1/2 h-5 w-0.5 -translate-y-1/2 rounded-r-full bg-primary" />}
-                        <span className={`transition-colors ${isActive ? 'text-primary' : 'text-muted-foreground/70 group-hover:text-foreground'}`}>
-                          {item.icon}
-                        </span>
-                        <span>{item.label}</span>
-                      </>
-                    )}
-                  </RouterNavLink>
-                ))}
-              </div>
-            ))}
-          </nav>
+        <aside className="hidden md:block w-60 shrink-0">
+          {SidebarNav}
         </aside>
         <main className="flex-1 min-w-0"><Routes>
           <Route path="/" element={<Dashboard />} />
@@ -303,6 +323,38 @@ function Shell({ user, onUserUpdate, onLogout }: { user: User; onUserUpdate: (us
           <Route path="*" element={<NotFound />} />
         </Routes></main>
       </div>
+
+      {/* Mobile sidebar drawer */}
+      <div
+        className={`fixed inset-0 z-40 md:hidden ${mobileNavOpen ? '' : 'pointer-events-none'}`}
+        aria-hidden={!mobileNavOpen}
+      >
+        <div
+          className={`absolute inset-0 bg-background/70 backdrop-blur-sm transition-opacity duration-200 ${mobileNavOpen ? 'opacity-100' : 'opacity-0'}`}
+          onClick={() => setMobileNavOpen(false)}
+        />
+        <div
+          className={`absolute inset-y-0 left-0 w-72 max-w-[85vw] transform border-r border-border/60 bg-background shadow-2xl transition-transform duration-200 ${mobileNavOpen ? 'translate-x-0' : '-translate-x-full'}`}
+          role="dialog"
+          aria-label="Navigation"
+        >
+          <div className="flex h-14 items-center justify-between border-b border-border/60 px-4">
+            <span className="text-sm font-semibold">Navigation</span>
+            <button
+              type="button"
+              onClick={() => setMobileNavOpen(false)}
+              className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+              aria-label="Close navigation"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+          <div className="p-2">
+            {SidebarNav}
+          </div>
+        </div>
+      </div>
+
       <CommandPalette />
     </div>
   );
