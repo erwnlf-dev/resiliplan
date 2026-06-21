@@ -29,6 +29,28 @@ const settingsSchema = z.object({
     clientId: z.string().optional(),
     redirectUri: z.string().optional(),
   }).default({ enabled: false, provider: 'oidc' }),
+  branding: z.object({
+    companyName: z.string().min(1).default('PT Datacomm Diangraha'),
+    companyTagline: z.string().default('IT Service Resilience'),
+    logoBase64: z.string().optional(),
+    logoMimeType: z.string().default('image/png'),
+    primaryColor: z.string().regex(/^#[0-9a-fA-F]{6}$/).default('#0F4C81'),
+    accentColor: z.string().regex(/^#[0-9a-fA-F]{6}$/).default('#F59E0B'),
+    documentFooter: z.string().default('Confidential — Internal Use Only'),
+    defaultDocumentPrefix: z.string().default('Disaster Recovery Plan'),
+    hidePlatformBranding: z.boolean().default(true),
+    documentClassification: z.enum(['public', 'internal', 'confidential', 'restricted']).default('confidential'),
+  }).default({
+    companyName: 'PT Datacomm Diangraha',
+    companyTagline: 'IT Service Resilience',
+    logoMimeType: 'image/png',
+    primaryColor: '#0F4C81',
+    accentColor: '#F59E0B',
+    documentFooter: 'Confidential — Internal Use Only',
+    defaultDocumentPrefix: 'Disaster Recovery Plan',
+    hidePlatformBranding: true,
+    documentClassification: 'confidential',
+  }),
 });
 
 export async function settingsRoutes(app: FastifyInstance) {

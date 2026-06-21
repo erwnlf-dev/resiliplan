@@ -58,7 +58,24 @@ type EmailProcessingPlan = { mode: 'manual_required' | 'smtp_ready'; canAutoSend
 type BiaDrpAlignment = { summary: { total: number; aligned: number; missingDrp: number; rtoGaps: number; rpoGaps: number }; items: Array<{ biaId: string; serviceName: string; processName: string; biaRtoMinutes: number; biaRpoMinutes: number; drpPlanId: string | null; drpTitle: string | null; drpRtoMinutes: number | null; drpRpoMinutes: number | null; status: 'missing_drp' | 'rto_gap' | 'rpo_gap' | 'aligned'; detail: string }> };
 type BootstrapStatus = { needsBootstrap: boolean; tenantCount: number; userCount: number; adminCount: number; bootstrapCommand: string; defaultSeedWarning: string };
 type ReadinessSummary = { status: string; failed: number; warnings: number; checks: Array<{ key: string; label: string; status: 'pass' | 'warn' | 'fail'; detail: string }> };
-type TenantSettings = { smtp: { mode: 'outbox_only' | 'smtp'; host?: string; port?: number; from?: string; configuredFromDashboard?: boolean }; internalAccess: { mode: 'ip_port'; securityGroupRestricted: boolean; adminPolicy: string }; backup: { frequency: 'daily'; retentionDays: number }; sso: { enabled: boolean; provider: 'oidc' | 'azure_ad'; issuerUrl?: string; clientId?: string; redirectUri?: string } };
+type TenantSettings = {
+  smtp: { mode: 'outbox_only' | 'smtp'; host?: string; port?: number; from?: string; configuredFromDashboard?: boolean };
+  internalAccess: { mode: 'ip_port'; securityGroupRestricted: boolean; adminPolicy: string };
+  backup: { frequency: 'daily'; retentionDays: number };
+  sso: { enabled: boolean; provider: 'oidc' | 'azure_ad'; issuerUrl?: string; clientId?: string; redirectUri?: string };
+  branding: {
+    companyName: string;
+    companyTagline: string;
+    logoBase64?: string;
+    logoMimeType: string;
+    primaryColor: string;
+    accentColor: string;
+    documentFooter: string;
+    defaultDocumentPrefix: string;
+    hidePlatformBranding: boolean;
+    documentClassification: 'public' | 'internal' | 'confidential' | 'restricted';
+  };
+};
 type AuditLogItem = { id: string; actorId?: string | null; actorEmail?: string | null; entityType: string; entityId: string; action: string; summary: string; metadata: Record<string, unknown>; appendOnly: boolean; createdAt: string };
 type DrpQualityScore = { score: number; status: 'weak' | 'fair' | 'good' | 'ready'; signals: Array<{ key: string; label: string; passed: boolean; weight: number; detail: string }>; gaps: string[] };
 type PlanEvidenceItem = { id: string; planId: string; sectionKey?: string | null; title: string; evidenceUrl: string; evidenceType: string; notes: string; createdAt: string };
@@ -2324,12 +2341,32 @@ function SettingsPage() {
   async function save(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault(); setError('');
     const form = event.currentTarget; const data = new FormData(form);
+    const fileInput = form.querySelector<HTMLInputElement>('input[type="file"][name="brandingLogoFile"]');
+    let logoBase64: string | undefined = (data.get('brandingLogoBase64') as string) || undefined;
+    if (fileInput?.files?.[0]) {
+      const file = fileInput.files[0];
+      const buf = await file.arrayBuffer();
+      const b64 = btoa(String.fromCharCode(...new Uint8Array(buf)));
+      logoBase64 = `data:${file.type || 'image/png'};base64,${b64}`;
+    }
     try {
       const payload: TenantSettings = {
         smtp: { mode: data.get('smtpMode') as 'outbox_only' | 'smtp', host: String(data.get('smtpHost') || '') || undefined, port: Number(data.get('smtpPort') || 0) || undefined, from: String(data.get('smtpFrom') || '') || undefined, configuredFromDashboard: true },
         internalAccess: { mode: 'ip_port', securityGroupRestricted: data.get('securityGroupRestricted') === 'on', adminPolicy: String(data.get('adminPolicy') || 'single_admin_erwin_only') },
         backup: { frequency: 'daily', retentionDays: Number(data.get('retentionDays') || 14) },
         sso: { enabled: data.get('ssoEnabled') === 'on', provider: data.get('ssoProvider') as 'oidc' | 'azure_ad', issuerUrl: String(data.get('ssoIssuerUrl') || '') || undefined, clientId: String(data.get('ssoClientId') || '') || undefined, redirectUri: String(data.get('ssoRedirectUri') || '') || undefined },
+        branding: {
+          companyName: String(data.get('brandingCompanyName') || 'PT Datacomm Diangraha'),
+          companyTagline: String(data.get('brandingTagline') || 'IT Service Resilience'),
+          logoBase64,
+          logoMimeType: String(data.get('brandingLogoMime') || 'image/png'),
+          primaryColor: String(data.get('brandingPrimary') || '#0F4C81'),
+          accentColor: String(data.get('brandingAccent') || '#F59E0B'),
+          documentFooter: String(data.get('brandingFooter') || 'Confidential — Internal Use Only'),
+          defaultDocumentPrefix: String(data.get('brandingDocPrefix') || 'Disaster Recovery Plan'),
+          hidePlatformBranding: data.get('brandingHidePlatform') === 'on',
+          documentClassification: (data.get('brandingClassification') as 'public' | 'internal' | 'confidential' | 'restricted') || 'confidential',
+        },
       };
       const updated = await api<{ settings: TenantSettings }>('/api/v1/settings', { method: 'PATCH', body: JSON.stringify(payload) });
       setSettings(updated.settings);
@@ -2337,7 +2374,7 @@ function SettingsPage() {
     } catch (err) { setError(err instanceof Error ? err.message : 'Save settings failed'); toast.error('Save failed'); }
   }
   return <div className="space-y-6">
-    <PageHeader eyebrow={<>System · Settings</>} title="Tenant Settings" description="Internal office access via IP:port; SMTP can be configured later from this dashboard. Single admin policy locked to Erwin." breadcrumbs={[{ label: 'Settings' }]} />
+    <PageHeader eyebrow={<>System · Settings</>} title="Tenant Settings" description="Internal office access via IP:port; SMTP can be configured later from this dashboard. Single admin policy locked to Erwin. Branding controls whitelabel cover on exported documents." breadcrumbs={[{ label: 'Settings' }]} />
     {error && <ErrorBox message={error} />}
     {loading || !settings ? <SkeletonList rows={3} /> : <>
       <form onSubmit={save} className="surface surface-lift grid gap-4 p-5 md:grid-cols-2">
@@ -2358,6 +2395,29 @@ function SettingsPage() {
         <Input name="ssoIssuerUrl" label="Issuer URL" defaultValue={settings.sso.issuerUrl ?? ''} />
         <Input name="ssoClientId" label="Client ID" defaultValue={settings.sso.clientId ?? ''} />
         <Input name="ssoRedirectUri" label="Redirect URI" defaultValue={settings.sso.redirectUri ?? ''} />
+
+        <div className="md:col-span-2 border-t pt-4">
+          <h2 className="font-semibold">Branding &amp; whitelabel</h2>
+          <p className="text-xs text-muted-foreground">Company name, logo, and colors used on exported PDF cover pages. The platform name is hidden by default; toggle below to show it.</p>
+        </div>
+        <Input name="brandingCompanyName" label="Company name" defaultValue={settings.branding.companyName} required />
+        <Input name="brandingTagline" label="Tagline" defaultValue={settings.branding.companyTagline} />
+        <div className="text-sm font-medium md:col-span-2">
+          Logo (PNG, JPG, or SVG)
+          <div className="mt-1 flex items-center gap-3">
+            {settings.branding.logoBase64 && <img src={settings.branding.logoBase64} alt="logo" className="h-12 w-12 rounded border bg-white p-1" />}
+            <input type="file" name="brandingLogoFile" accept="image/png,image/jpeg,image/svg+xml" className="input" />
+            <input type="hidden" name="brandingLogoBase64" defaultValue={settings.branding.logoBase64 ?? ''} />
+            <input type="hidden" name="brandingLogoMime" defaultValue={settings.branding.logoMimeType} />
+          </div>
+        </div>
+        <label className="text-sm font-medium">Primary color<input name="brandingPrimary" type="color" defaultValue={settings.branding.primaryColor} className="input mt-1 h-10" /></label>
+        <label className="text-sm font-medium">Accent color<input name="brandingAccent" type="color" defaultValue={settings.branding.accentColor} className="input mt-1 h-10" /></label>
+        <Input name="brandingFooter" label="Document footer" defaultValue={settings.branding.documentFooter} />
+        <Input name="brandingDocPrefix" label="Default document prefix" defaultValue={settings.branding.defaultDocumentPrefix} />
+        <label className="text-sm font-medium">Classification<select name="brandingClassification" defaultValue={settings.branding.documentClassification} className="input mt-1"><option value="public">Public</option><option value="internal">Internal</option><option value="confidential">Confidential</option><option value="restricted">Restricted</option></select></label>
+        <label className="flex items-center gap-2 text-sm font-medium md:col-span-2"><input name="brandingHidePlatform" type="checkbox" defaultChecked={settings.branding.hidePlatformBranding} className="h-4 w-4" /> Hide platform name on exported documents (whitelabel mode)</label>
+
         <div className="md:col-span-2"><Button type="submit" variant="primary" size="md">Save settings</Button></div>
       </form>
     </>}
