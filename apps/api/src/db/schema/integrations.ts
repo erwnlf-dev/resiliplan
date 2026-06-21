@@ -20,6 +20,7 @@ export const integrationType = pgEnum('integration_type', [
   'keycloak',          // Keycloak SSO (OIDC)
   'authentik',         // Authentik SSO
   'borg',              // BorgBackup / restic status
+  'acronis',           // Acronis Cyber Protect (closed-source) → auto-BIA + RPO verification
   // Sink: push data FROM ResiliPlan
   'mattermost',        // Mattermost ChatOps notifications
   'rocketchat',        // Rocket.Chat notifications

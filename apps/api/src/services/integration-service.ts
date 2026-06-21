@@ -13,6 +13,7 @@ import { logger } from '../utils/logger.js';
 import type { Integration, NewIntegration, IntegrationSync } from '../db/schema/integrations.js';
 import { runNetBoxSync } from './adapters/netbox-adapter.js';
 import { runPrometheusReceiver } from './adapters/prometheus-adapter.js';
+import { runAcronisSync } from './adapters/acronis-adapter.js';
 import { dispatchMattermostNotification } from './adapters/mattermost-adapter.js';
 import { dispatchGenericWebhook } from './adapters/webhook-adapter.js';
 
@@ -193,6 +194,24 @@ export const SUPPORTED_INTEGRATIONS: IntegrationTypeConfig[] = [
       apiKey: { type: 'string', required: true, secret: true, description: 'API key' },
     },
     eventSubscriptions: ['plan.approved', 'bia.review_due'],
+  },
+  {
+    type: 'acronis',
+    direction: 'inbound',
+    displayName: 'Acronis Cyber Protect',
+    description: 'Pull protected resources dari Acronis (Datacomm Cloud Backup). Auto-populate BIA + RPO verification.',
+    openSource: false, // Acronis is closed-source (PT Datacomm customer product)
+    homepage: 'https://developer.acronis.com',
+    configSchema: {
+      proxyUrl: { type: 'string', required: true, description: 'SaaS worker proxy URL (recommended). Contoh: http://127.0.0.1:4184/api/workers/acronis/query' },
+      tenantId: { type: 'string', required: true, description: 'Acronis tenant UUID (unit level, e.g. DCloud Ops = 817a4664-be85-44e8-81ed-8da879c70e6e)' },
+      rpoThresholdHours: { type: 'number', default: 24, description: 'RPO breach threshold (hours). Default 24.' },
+      tagPrefix: { type: 'string', description: 'Only sync resources dengan tag ini (case-insensitive substring match di name)' },
+      excludeNamePatterns: { type: 'array', description: 'Regex patterns untuk exclude dari sync (e.g. "test|demo|temp")' },
+      excludeResourceTypes: { type: 'array', description: 'Resource types untuk exclude (default: group, vCenter, cluster, etc.)' },
+      syncIntervalMinutes: { type: 'number', default: 60, description: 'Sync interval (minutes)' },
+    },
+    eventSubscriptions: ['integration.sync_completed', 'integration.sync_failed'],
   },
   {
     type: 'keycloak',
@@ -376,6 +395,9 @@ export class IntegrationService {
       switch (integration.type) {
         case 'netbox':
           result = await runNetBoxSync(tenantId, configDecrypted as any);
+          break;
+        case 'acronis':
+          result = await runAcronisSync(tenantId, configDecrypted as any);
           break;
         case 'prometheus':
           // Prometheus is webhook-driven; sync verifies webhook secret
