@@ -223,23 +223,59 @@ function LoginPage({ onLogin }: { onLogin: (user: User) => void }) {
     } finally { setLoading(false); }
   }
 
-  return <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-background via-background to-primary/5 p-6 anim-fade-in"><form onSubmit={submit} className="w-full max-w-md surface surface-lift p-8">
-    <div className="mb-6 flex items-center gap-3">
-      <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-accent text-primary-foreground shadow-soft">
-        <Lock className="h-5 w-5" />
+  return (
+    <div className="relative min-h-screen overflow-hidden">
+      {/* Decorative aurora blobs — fixed, behind content */}
+      <div className="pointer-events-none fixed inset-0 -z-10 overflow-hidden" aria-hidden>
+        <div className="absolute -top-32 -left-32 h-[36rem] w-[36rem] rounded-full bg-primary/25 blur-3xl anim-float" />
+        <div className="absolute top-1/3 -right-40 h-[32rem] w-[32rem] rounded-full bg-accent/20 blur-3xl anim-float-slow" />
+        <div className="absolute bottom-0 left-1/3 h-[28rem] w-[28rem] rounded-full bg-[hsl(280,80%,65%)]/15 blur-3xl anim-float" />
       </div>
-      <div>
-        <h1 className="text-xl font-bold tracking-tight anim-gradient-text">Login ResiliPlan</h1>
-        <p className="text-sm text-muted-foreground">Core DRP workspace</p>
+
+      <div className="flex min-h-screen items-center justify-center p-6 anim-fade-in">
+        <div className="w-full max-w-5xl grid gap-10 lg:grid-cols-2 items-center">
+          {/* Hero */}
+          <div className="hidden lg:block space-y-6 anim-fade-up">
+            <div className="inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">
+              <Sparkles className="h-3 w-3" /> ISO 22301-aligned
+            </div>
+            <h1 className="display display-glow">Build resilient DR plans, faster.</h1>
+            <p className="text-base text-muted-foreground max-w-md">ResiliPlan is a self-hosted Disaster Recovery Plan builder with AI co-pilots, real-time collaboration, and ISO 22301 templates baked in.</p>
+            <div className="flex flex-wrap gap-3 pt-2">
+              <span className="badge border-primary/30 bg-primary/10 text-primary">14 ISO sections</span>
+              <span className="badge border-accent/30 bg-accent/10 text-accent">AI helpers</span>
+              <span className="badge border-border bg-muted/60 text-muted-foreground">Realtime collab</span>
+              <span className="badge border-border bg-muted/60 text-muted-foreground">Audit trail</span>
+            </div>
+          </div>
+
+          {/* Login form */}
+          <form onSubmit={submit} className="surface-glow p-8 anim-fade-up" style={{ animationDelay: '120ms' }}>
+            <div className="mb-6 flex items-center gap-3">
+              <div className="relative flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-primary via-accent to-[hsl(280,80%,65%)] text-primary-foreground shadow-soft anim-pulse-glow">
+                <Lock className="h-5 w-5" />
+              </div>
+              <div>
+                <h2 className="text-xl font-bold tracking-tight">Sign in</h2>
+                <p className="text-sm text-muted-foreground">Core DRP workspace</p>
+              </div>
+            </div>
+            {error && <div className="mb-4 rounded-xl border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">{error}</div>}
+            <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Email</label>
+            <input value={email} onChange={(e) => setEmail(e.target.value)} className="input mb-4 mt-1.5" />
+            <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Password</label>
+            <input value={password} onChange={(e) => setPassword(e.target.value)} type="password" className="input mb-4 mt-1.5" />
+            <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">TOTP code <span className="text-muted-foreground/70 normal-case font-normal">(if MFA enabled)</span></label>
+            <input value={totp} onChange={(e) => setTotp(e.target.value)} inputMode="numeric" className="input mb-6 mt-1.5" />
+            <button disabled={loading} className="btn-primary w-full">
+              {loading ? <span className="anim-pulse-soft">Signing in…</span> : 'Sign in'}
+            </button>
+            <div className="mt-4 text-center text-sm"><Link to="/forgot-password" className="font-medium text-primary hover:underline">Forgot password?</Link></div>
+          </form>
+        </div>
       </div>
     </div>
-    {error && <div className="mb-4 rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">{error}</div>}
-    <label className="text-sm font-medium">Email</label><input value={email} onChange={(e) => setEmail(e.target.value)} className="input mb-4 mt-1" />
-    <label className="text-sm font-medium">Password</label><input value={password} onChange={(e) => setPassword(e.target.value)} type="password" className="input mb-4 mt-1" />
-    <label className="text-sm font-medium">TOTP code <span className="text-muted-foreground">(if MFA enabled)</span></label><input value={totp} onChange={(e) => setTotp(e.target.value)} inputMode="numeric" className="input mb-6 mt-1" />
-    <button disabled={loading} className="btn-primary w-full">{loading ? <span className="anim-pulse-soft">Signing in…</span> : 'Sign in'}</button>
-    <div className="mt-4 text-center text-sm"><Link to="/forgot-password" className="text-primary hover:underline">Forgot password?</Link></div>
-  </form></div>;
+  );
 }
 
 function ForgotPasswordPage() {
@@ -789,7 +825,7 @@ function RegisterPage({ title, subtitle, error, children }: { title: string; sub
 function SimpleTable({ headers, rows, empty }: { headers: string[]; rows: string[][]; empty: string }) { return <div className="overflow-hidden rounded-lg border bg-card"><div className="grid border-b bg-muted/40 p-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground" style={{ gridTemplateColumns: `repeat(${headers.length}, minmax(0, 1fr))` }}>{headers.map((header) => <div key={header}>{header}</div>)}</div>{rows.length === 0 ? <div className="p-6 text-center text-sm text-muted-foreground">{empty}</div> : rows.map((row, index) => <div key={index} className="grid border-b p-3 text-sm last:border-0" style={{ gridTemplateColumns: `repeat(${headers.length}, minmax(0, 1fr))` }}>{row.map((cell, cellIndex) => <div key={cellIndex} className="truncate pr-3">{cell}</div>)}</div>)}</div>; }
 
 function DownloadLink({ href, label }: { href: string; label: string }) { return <a href={`${API}${href}`} className="inline-flex items-center gap-1 rounded-md border px-3 py-2 text-sm"><Download className="h-4 w-4" /> Export {label}</a>; }
-function NavLink({ to, icon, children }: { to: string; icon: React.ReactNode; children: React.ReactNode }) { return <Link to={to} className="flex items-center gap-2 rounded-md px-3 py-2 text-muted-foreground transition-all duration-150 hover:bg-muted hover:text-foreground hover:translate-x-0.5">{icon}<span>{children}</span></Link>; }
+function NavLink({ to, icon, children }: { to: string; icon: React.ReactNode; children: React.ReactNode }) { return <Link to={to} className="group flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground transition-all duration-200 hover:bg-primary/10 hover:text-foreground hover:translate-x-0.5"><span className="text-muted-foreground/70 transition-colors group-hover:text-primary">{icon}</span><span>{children}</span></Link>; }
 function Dashboard() {
   const [plans, setPlans] = useState<Plan[]>([]);
   const [summary, setSummary] = useState<ResilienceSummary | null>(null);
@@ -797,9 +833,65 @@ function Dashboard() {
     api<{ plans: Plan[] }>('/api/v1/plans').then((d) => setPlans(d.plans)).catch(() => setPlans([]));
     api<{ summary: ResilienceSummary }>('/api/v1/resilience/summary').then((d) => setSummary(d.summary)).catch(() => setSummary(null));
   }, []);
-  return <div className="space-y-6 anim-fade-up"><div><h1 className="text-2xl font-bold tracking-tight">Dashboard</h1><p className="text-sm text-muted-foreground">Disaster recovery posture overview</p></div><div className="anim-stagger grid gap-4 sm:grid-cols-2 lg:grid-cols-4"><KpiCard label="Total DRP" value={`${plans.length}`} hint="Total plans" /><KpiCard label="Approved" value={`${plans.filter((p) => p.status === 'approved').length}`} hint="Ready for incident" /><KpiCard label="Open Risks" value={`${summary?.openRisks ?? 0}`} hint={`${summary?.highRisks ?? 0} high risk`} /><KpiCard label="Planned Drills" value={`${summary?.plannedDrills ?? 0}`} hint={`${summary?.completedDrills ?? 0} completed`} /></div><div className="grid gap-4 lg:grid-cols-3"><KpiCard label="Assets" value={`${summary?.totalAssets ?? 0}`} hint={`${summary?.criticalAssets ?? 0} critical assets`} /><KpiCard label="Priority Recovery" value={`${summary?.priorityRecoveryAssets ?? 0}`} hint="Priority 1-2 assets" /><KpiCard label="Coverage" value={plans.length ? `${Math.round((plans.filter((p) => p.status === 'approved').length / plans.length) * 100)}%` : '0%'} hint="Approved / total DRP" /></div><div className="surface surface-lift p-6"><h2 className="mb-2 text-lg font-bold tracking-tight">DR Plan Builder SaaS workspace aktif</h2><p className="text-sm text-muted-foreground">Buat DRP ISO 22301, register asset dependency, risk register, drill schedule, approval, audit, dan export.</p></div></div>;
+  return (
+    <div className="space-y-8 anim-fade-up">
+      <div className="relative">
+        <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-primary">
+          <Sparkles className="h-3.5 w-3.5" /> Operations overview
+        </div>
+        <h1 className="display mt-2">DR posture, at a glance.</h1>
+        <p className="mt-2 text-sm text-muted-foreground max-w-xl">Real-time signal from your DR plans, risks, assets, and drill schedule — all in one calm surface.</p>
+      </div>
+
+      <div className="anim-stagger grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <KpiCard label="Total DRP" value={`${plans.length}`} hint="Total plans" tone="primary" />
+        <KpiCard label="Approved" value={`${plans.filter((p) => p.status === 'approved').length}`} hint="Ready for incident" tone="success" />
+        <KpiCard label="Open Risks" value={`${summary?.openRisks ?? 0}`} hint={`${summary?.highRisks ?? 0} high risk`} tone="warning" />
+        <KpiCard label="Planned Drills" value={`${summary?.plannedDrills ?? 0}`} hint={`${summary?.completedDrills ?? 0} completed`} tone="info" />
+      </div>
+
+      <div className="anim-stagger grid gap-4 lg:grid-cols-3">
+        <KpiCard label="Assets" value={`${summary?.totalAssets ?? 0}`} hint={`${summary?.criticalAssets ?? 0} critical assets`} tone="primary" />
+        <KpiCard label="Priority Recovery" value={`${summary?.priorityRecoveryAssets ?? 0}`} hint="Priority 1-2 assets" tone="warning" />
+        <KpiCard label="Coverage" value={plans.length ? `${Math.round((plans.filter((p) => p.status === 'approved').length / plans.length) * 100)}%` : '0%'} hint="Approved / total DRP" tone="success" />
+      </div>
+
+      <div className="relative surface-glow overflow-hidden p-6">
+        <div className="pointer-events-none absolute -right-20 -top-20 h-64 w-64 rounded-full bg-primary/20 blur-3xl" />
+        <div className="pointer-events-none absolute -left-16 -bottom-16 h-48 w-48 rounded-full bg-accent/20 blur-3xl" />
+        <div className="relative">
+          <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-primary">
+            <Sparkles className="h-3.5 w-3.5" /> Workspace
+          </div>
+          <h2 className="mt-2 text-2xl font-bold tracking-tight">DR Plan Builder SaaS — ready.</h2>
+          <p className="mt-2 max-w-2xl text-sm text-muted-foreground">Buat DRP ISO 22301, register asset dependency, risk register, drill schedule, approval, audit, dan export. AI co-pilot aktif di tiap section.</p>
+          <div className="mt-5 flex flex-wrap gap-2">
+            <Link to="/plans" className="btn-primary">Buka DR Plans</Link>
+            <Link to="/ai-providers" className="btn-ghost">Konfigurasi AI</Link>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 }
-function KpiCard({ label, value, hint }: { label: string; value: string; hint: string }) { return <div className="surface surface-lift p-4 transition-shadow"><p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{label}</p><p className="mt-2 text-2xl font-bold tracking-tight">{value}</p><p className="mt-1 text-xs text-muted-foreground">{hint}</p></div>; }
+function KpiCard({ label, value, hint, tone = 'primary' }: { label: string; value: string; hint: string; tone?: 'primary' | 'success' | 'warning' | 'info' }) {
+  const toneClass = {
+    primary: 'from-primary/15 to-primary/0 text-primary',
+    success: 'from-emerald-500/15 to-emerald-500/0 text-emerald-600 dark:text-emerald-400',
+    warning: 'from-amber-500/15 to-amber-500/0 text-amber-600 dark:text-amber-400',
+    info: 'from-cyan-500/15 to-cyan-500/0 text-cyan-600 dark:text-cyan-400',
+  }[tone];
+  return (
+    <div className="surface surface-lift relative overflow-hidden p-5">
+      <div className={`pointer-events-none absolute -right-8 -top-8 h-24 w-24 rounded-full bg-gradient-to-br ${toneClass} blur-2xl`} />
+      <div className="relative">
+        <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{label}</p>
+        <p className="stat-number mt-3">{value}</p>
+        <p className="mt-2 text-xs text-muted-foreground">{hint}</p>
+      </div>
+    </div>
+  );
+}
 function StatusBadge({ status }: { status: string }) { const color = status === 'approved' ? 'bg-green-100 text-green-700' : status === 'in_review' ? 'bg-yellow-100 text-yellow-800' : 'bg-slate-100 text-slate-700'; return <span className={`rounded-full px-2 py-1 text-xs font-medium ${color}`}>{status.replace('_', ' ')}</span>; }
 function Input(props: React.InputHTMLAttributes<HTMLInputElement> & { label: string }) { const { label, ...rest } = props; return <label className="text-sm font-medium">{label}<input {...rest} className="mt-1 w-full rounded-md border px-3 py-2" /></label>; }
 function PlaceholderPage({ title, note }: { title: string; note: string }) { return <div className="space-y-4"><h1 className="text-2xl font-bold">{title}</h1><div className="rounded-lg border border-dashed border-border bg-card/50 p-12 text-center"><p className="text-sm text-muted-foreground">{note}</p></div></div>; }
