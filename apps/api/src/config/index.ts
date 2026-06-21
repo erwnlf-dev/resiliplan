@@ -8,15 +8,15 @@ import { config as loadDotenv } from 'dotenv';
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-// Load .env from monorepo root (hardcoded path for reliability)
-const MONOREPO_ROOT = resolve(process.cwd(), '..', '..');
-const envPath = resolve(MONOREPO_ROOT, '.env');
+// Load .env from current repo/workspace root (works from monorepo root or apps/api)
+const envCandidates = [resolve(process.cwd(), '.env'), resolve(process.cwd(), '..', '..', '.env')];
+const envPath = envCandidates.find((candidate) => existsSync(candidate));
 
-if (existsSync(envPath)) {
+if (envPath) {
   loadDotenv({ path: envPath });
   console.log(`[config] Loaded .env from: ${envPath}`);
 } else {
-  console.warn(`[config] .env not found at ${envPath}, using process.env`);
+  console.warn(`[config] .env not found in candidates: ${envCandidates.join(', ')}, using process.env`);
 }
 
 const ConfigSchema = z.object({

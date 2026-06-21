@@ -25,7 +25,7 @@ async function start() {
   logger.info({ host: COLLAB_HOST, port: COLLAB_PORT }, 'ResiliPlan collaboration server started');
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (process.env.VITEST !== 'true') {
   start().catch((err) => {
     logger.fatal({ err }, 'Failed to start collaboration server');
     process.exit(1);

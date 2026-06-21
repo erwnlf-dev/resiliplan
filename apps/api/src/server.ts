@@ -242,7 +242,8 @@ async function start() {
   }
 }
 
-// Start if run directly (not imported for testing)
-if (import.meta.url === `file://${process.argv[1]}`) {
+// Start unless loaded by Vitest. PM2 loads ESM through a container, so process.argv[1]
+// is not the app script there; an import.meta argv guard would exit immediately.
+if (process.env.VITEST !== 'true') {
   start();
 }
