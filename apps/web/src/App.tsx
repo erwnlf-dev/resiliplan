@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, Route, Routes, useNavigate, useParams } from 'react-router-dom';
-import { Activity, AlertTriangle, Bell, Calendar, CheckCircle2, CreditCard, Download, FileText, Home, Lock, LogOut, Mail, Save, Send, Server, Settings, Sparkles, Users } from 'lucide-react';
+import { Activity, AlertTriangle, Bell, Calendar, CheckCircle2, CreditCard, Download, FileText, Home, Lock, LogOut, Mail, Moon, Save, Send, Server, Settings, Sparkles, Sun, Users } from 'lucide-react';
 import * as Y from 'yjs';
 import { WebsocketProvider } from 'y-websocket';
 
@@ -78,6 +78,34 @@ async function api<T>(path: string, options: RequestInit = {}): Promise<T> {
   return res.json() as Promise<T>;
 }
 
+function useTheme() {
+  const [theme, setTheme] = useState<'light' | 'dark'>(() => {
+    if (typeof document === 'undefined') return 'light';
+    return document.documentElement.classList.contains('dark') ? 'dark' : 'light';
+  });
+  useEffect(() => {
+    const root = document.documentElement;
+    if (theme === 'dark') root.classList.add('dark');
+    else root.classList.remove('dark');
+    try { localStorage.setItem('resiliplan-theme', theme); } catch {}
+  }, [theme]);
+  return { theme, toggle: () => setTheme((t) => (t === 'dark' ? 'light' : 'dark')) };
+}
+
+function ThemeToggle() {
+  const { theme, toggle } = useTheme();
+  return (
+    <button
+      onClick={toggle}
+      title={theme === 'dark' ? 'Switch to light' : 'Switch to dark'}
+      aria-label="Toggle theme"
+      className="btn-ghost h-8 w-8 !p-0 rounded-full"
+    >
+      {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+    </button>
+  );
+}
+
 export function App() {
   const [user, setUser] = useState<User | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
@@ -113,21 +141,26 @@ function Shell({ user, onUserUpdate, onLogout }: { user: User; onUserUpdate: (us
 
   return (
     <div className="min-h-screen bg-background">
-      <header className="border-b border-border bg-card">
+      <header className="sticky top-0 z-30 border-b border-border/60 glass">
         <div className="container flex h-14 items-center justify-between">
           <div className="flex items-center gap-2">
-            <div className="flex h-8 w-8 items-center justify-center rounded-md bg-primary text-primary-foreground"><FileText className="h-4 w-4" /></div>
-            <span className="font-semibold">ResiliPlan</span>
-            <span className="rounded-full bg-blue-50 px-2 py-0.5 text-xs text-blue-700">Phase 1 Core DRP</span>
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-primary to-accent text-primary-foreground shadow-soft">
+              <FileText className="h-4 w-4" />
+            </div>
+            <span className="font-bold tracking-tight">ResiliPlan</span>
+            <span className="hidden rounded-full border border-border/60 bg-muted/60 px-2 py-0.5 text-xs font-medium text-muted-foreground sm:inline-block">Phase 1 Core DRP</span>
           </div>
-          <div className="flex items-center gap-3 text-sm text-muted-foreground">
-            <span>{user.name} · {user.role}</span>
-            <button onClick={logout} className="inline-flex items-center gap-1 rounded-md border px-2 py-1 hover:bg-muted"><LogOut className="h-3 w-3" /> Logout</button>
+          <div className="flex items-center gap-3 text-sm">
+            <span className="hidden text-muted-foreground sm:inline">{user.name} · <span className="font-medium text-foreground/80">{user.role}</span></span>
+            <ThemeToggle />
+            <button onClick={logout} className="inline-flex items-center gap-1 rounded-md border border-border/60 px-2 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground">
+              <LogOut className="h-3 w-3" /> Logout
+            </button>
           </div>
         </div>
       </header>
       <div className="container flex gap-6 py-6">
-        <aside className="w-56 shrink-0"><nav className="space-y-1 text-sm">
+        <aside className="w-56 shrink-0"><nav className="surface surface-lift sticky top-20 space-y-1 p-2 text-sm">
           <NavLink to="/" icon={<Home className="h-4 w-4" />}>Dashboard</NavLink>
           <NavLink to="/plans" icon={<FileText className="h-4 w-4" />}>DR Plans</NavLink>
           <NavLink to="/bia" icon={<CheckCircle2 className="h-4 w-4" />}>BIA</NavLink>
@@ -146,7 +179,7 @@ function Shell({ user, onUserUpdate, onLogout }: { user: User; onUserUpdate: (us
           <NavLink to="/ai-providers" icon={<Sparkles className="h-4 w-4" />}>AI Providers</NavLink>
           <NavLink to="/security" icon={<Lock className="h-4 w-4" />}>Security</NavLink>
         </nav></aside>
-        <main className="flex-1"><Routes>
+        <main className="flex-1 animate-fade-up"><Routes>
           <Route path="/" element={<Dashboard />} />
           <Route path="/plans" element={<PlansPage />} />
           <Route path="/plans/:id" element={<PlanEditor />} />
@@ -190,13 +223,21 @@ function LoginPage({ onLogin }: { onLogin: (user: User) => void }) {
     } finally { setLoading(false); }
   }
 
-  return <div className="flex min-h-screen items-center justify-center bg-slate-50 p-6"><form onSubmit={submit} className="w-full max-w-md rounded-xl border bg-white p-8 shadow-sm">
-    <div className="mb-6 flex items-center gap-2"><div className="rounded-lg bg-primary p-2 text-white"><Lock className="h-5 w-5" /></div><div><h1 className="text-xl font-semibold">Login ResiliPlan</h1><p className="text-sm text-muted-foreground">Core DRP workspace</p></div></div>
-    {error && <div className="mb-4 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div>}
-    <label className="text-sm font-medium">Email</label><input value={email} onChange={(e) => setEmail(e.target.value)} className="mb-4 mt-1 w-full rounded-md border px-3 py-2" />
-    <label className="text-sm font-medium">Password</label><input value={password} onChange={(e) => setPassword(e.target.value)} type="password" className="mb-4 mt-1 w-full rounded-md border px-3 py-2" />
-    <label className="text-sm font-medium">TOTP code <span className="text-muted-foreground">(if MFA enabled)</span></label><input value={totp} onChange={(e) => setTotp(e.target.value)} inputMode="numeric" className="mb-6 mt-1 w-full rounded-md border px-3 py-2" />
-    <button disabled={loading} className="w-full rounded-md bg-primary px-4 py-2 font-medium text-white disabled:opacity-50">{loading ? 'Signing in...' : 'Sign in'}</button>
+  return <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-background via-background to-primary/5 p-6 anim-fade-in"><form onSubmit={submit} className="w-full max-w-md surface surface-lift p-8">
+    <div className="mb-6 flex items-center gap-3">
+      <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-accent text-primary-foreground shadow-soft">
+        <Lock className="h-5 w-5" />
+      </div>
+      <div>
+        <h1 className="text-xl font-bold tracking-tight anim-gradient-text">Login ResiliPlan</h1>
+        <p className="text-sm text-muted-foreground">Core DRP workspace</p>
+      </div>
+    </div>
+    {error && <div className="mb-4 rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">{error}</div>}
+    <label className="text-sm font-medium">Email</label><input value={email} onChange={(e) => setEmail(e.target.value)} className="input mb-4 mt-1" />
+    <label className="text-sm font-medium">Password</label><input value={password} onChange={(e) => setPassword(e.target.value)} type="password" className="input mb-4 mt-1" />
+    <label className="text-sm font-medium">TOTP code <span className="text-muted-foreground">(if MFA enabled)</span></label><input value={totp} onChange={(e) => setTotp(e.target.value)} inputMode="numeric" className="input mb-6 mt-1" />
+    <button disabled={loading} className="btn-primary w-full">{loading ? <span className="anim-pulse-soft">Signing in…</span> : 'Sign in'}</button>
     <div className="mt-4 text-center text-sm"><Link to="/forgot-password" className="text-primary hover:underline">Forgot password?</Link></div>
   </form></div>;
 }
@@ -748,7 +789,7 @@ function RegisterPage({ title, subtitle, error, children }: { title: string; sub
 function SimpleTable({ headers, rows, empty }: { headers: string[]; rows: string[][]; empty: string }) { return <div className="overflow-hidden rounded-lg border bg-card"><div className="grid border-b bg-muted/40 p-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground" style={{ gridTemplateColumns: `repeat(${headers.length}, minmax(0, 1fr))` }}>{headers.map((header) => <div key={header}>{header}</div>)}</div>{rows.length === 0 ? <div className="p-6 text-center text-sm text-muted-foreground">{empty}</div> : rows.map((row, index) => <div key={index} className="grid border-b p-3 text-sm last:border-0" style={{ gridTemplateColumns: `repeat(${headers.length}, minmax(0, 1fr))` }}>{row.map((cell, cellIndex) => <div key={cellIndex} className="truncate pr-3">{cell}</div>)}</div>)}</div>; }
 
 function DownloadLink({ href, label }: { href: string; label: string }) { return <a href={`${API}${href}`} className="inline-flex items-center gap-1 rounded-md border px-3 py-2 text-sm"><Download className="h-4 w-4" /> Export {label}</a>; }
-function NavLink({ to, icon, children }: { to: string; icon: React.ReactNode; children: React.ReactNode }) { return <Link to={to} className="flex items-center gap-2 rounded-md px-3 py-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground">{icon}<span>{children}</span></Link>; }
+function NavLink({ to, icon, children }: { to: string; icon: React.ReactNode; children: React.ReactNode }) { return <Link to={to} className="flex items-center gap-2 rounded-md px-3 py-2 text-muted-foreground transition-all duration-150 hover:bg-muted hover:text-foreground hover:translate-x-0.5">{icon}<span>{children}</span></Link>; }
 function Dashboard() {
   const [plans, setPlans] = useState<Plan[]>([]);
   const [summary, setSummary] = useState<ResilienceSummary | null>(null);
@@ -756,9 +797,9 @@ function Dashboard() {
     api<{ plans: Plan[] }>('/api/v1/plans').then((d) => setPlans(d.plans)).catch(() => setPlans([]));
     api<{ summary: ResilienceSummary }>('/api/v1/resilience/summary').then((d) => setSummary(d.summary)).catch(() => setSummary(null));
   }, []);
-  return <div className="space-y-6"><div><h1 className="text-2xl font-bold">Dashboard</h1><p className="text-sm text-muted-foreground">Disaster recovery posture overview</p></div><div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4"><KpiCard label="Total DRP" value={`${plans.length}`} hint="Total plans" /><KpiCard label="Approved" value={`${plans.filter((p) => p.status === 'approved').length}`} hint="Ready for incident" /><KpiCard label="Open Risks" value={`${summary?.openRisks ?? 0}`} hint={`${summary?.highRisks ?? 0} high risk`} /><KpiCard label="Planned Drills" value={`${summary?.plannedDrills ?? 0}`} hint={`${summary?.completedDrills ?? 0} completed`} /></div><div className="grid gap-4 lg:grid-cols-3"><KpiCard label="Assets" value={`${summary?.totalAssets ?? 0}`} hint={`${summary?.criticalAssets ?? 0} critical assets`} /><KpiCard label="Priority Recovery" value={`${summary?.priorityRecoveryAssets ?? 0}`} hint="Priority 1-2 assets" /><KpiCard label="Coverage" value={plans.length ? `${Math.round((plans.filter((p) => p.status === 'approved').length / plans.length) * 100)}%` : '0%'} hint="Approved / total DRP" /></div><div className="rounded-lg border border-border bg-card p-6"><h2 className="mb-2 text-lg font-semibold">DR Plan Builder SaaS workspace aktif</h2><p className="text-sm text-muted-foreground">Buat DRP ISO 22301, register asset dependency, risk register, drill schedule, approval, audit, dan export.</p></div></div>;
+  return <div className="space-y-6 anim-fade-up"><div><h1 className="text-2xl font-bold tracking-tight">Dashboard</h1><p className="text-sm text-muted-foreground">Disaster recovery posture overview</p></div><div className="anim-stagger grid gap-4 sm:grid-cols-2 lg:grid-cols-4"><KpiCard label="Total DRP" value={`${plans.length}`} hint="Total plans" /><KpiCard label="Approved" value={`${plans.filter((p) => p.status === 'approved').length}`} hint="Ready for incident" /><KpiCard label="Open Risks" value={`${summary?.openRisks ?? 0}`} hint={`${summary?.highRisks ?? 0} high risk`} /><KpiCard label="Planned Drills" value={`${summary?.plannedDrills ?? 0}`} hint={`${summary?.completedDrills ?? 0} completed`} /></div><div className="grid gap-4 lg:grid-cols-3"><KpiCard label="Assets" value={`${summary?.totalAssets ?? 0}`} hint={`${summary?.criticalAssets ?? 0} critical assets`} /><KpiCard label="Priority Recovery" value={`${summary?.priorityRecoveryAssets ?? 0}`} hint="Priority 1-2 assets" /><KpiCard label="Coverage" value={plans.length ? `${Math.round((plans.filter((p) => p.status === 'approved').length / plans.length) * 100)}%` : '0%'} hint="Approved / total DRP" /></div><div className="surface surface-lift p-6"><h2 className="mb-2 text-lg font-bold tracking-tight">DR Plan Builder SaaS workspace aktif</h2><p className="text-sm text-muted-foreground">Buat DRP ISO 22301, register asset dependency, risk register, drill schedule, approval, audit, dan export.</p></div></div>;
 }
-function KpiCard({ label, value, hint }: { label: string; value: string; hint: string }) { return <div className="rounded-lg border border-border bg-card p-4"><p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{label}</p><p className="mt-2 text-2xl font-bold">{value}</p><p className="mt-1 text-xs text-muted-foreground">{hint}</p></div>; }
+function KpiCard({ label, value, hint }: { label: string; value: string; hint: string }) { return <div className="surface surface-lift p-4 transition-shadow"><p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{label}</p><p className="mt-2 text-2xl font-bold tracking-tight">{value}</p><p className="mt-1 text-xs text-muted-foreground">{hint}</p></div>; }
 function StatusBadge({ status }: { status: string }) { const color = status === 'approved' ? 'bg-green-100 text-green-700' : status === 'in_review' ? 'bg-yellow-100 text-yellow-800' : 'bg-slate-100 text-slate-700'; return <span className={`rounded-full px-2 py-1 text-xs font-medium ${color}`}>{status.replace('_', ' ')}</span>; }
 function Input(props: React.InputHTMLAttributes<HTMLInputElement> & { label: string }) { const { label, ...rest } = props; return <label className="text-sm font-medium">{label}<input {...rest} className="mt-1 w-full rounded-md border px-3 py-2" /></label>; }
 function PlaceholderPage({ title, note }: { title: string; note: string }) { return <div className="space-y-4"><h1 className="text-2xl font-bold">{title}</h1><div className="rounded-lg border border-dashed border-border bg-card/50 p-12 text-center"><p className="text-sm text-muted-foreground">{note}</p></div></div>; }
