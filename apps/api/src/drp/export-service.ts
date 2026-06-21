@@ -1,3 +1,103 @@
+import { spawn } from 'node:child_process';
+import { mkdtemp, readFile, writeFile, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const DEFAULT_BRANDING: Required<ExportBranding> = {
+  companyName: 'PT Datacomm Diangraha',
+  companyTagline: 'IT Service Resilience',
+  logoBase64: '',
+  primaryColor: '#0F4C81',
+  accentColor: '#F59E0B',
+  documentFooter: 'Confidential — Internal Use Only',
+  defaultDocumentPrefix: 'Disaster Recovery Plan',
+  hidePlatformBranding: true,
+  documentClassification: 'confidential',
+};
+
+function resolveScriptPath(override?: string): string {
+  if (override) return override;
+  // Resolve relative to this source file: ../../scripts/pdf_renderer.py
+  // src/drp/export-service.ts → ../../scripts/pdf_renderer.py
+  const here = fileURLToPath(new URL('.', import.meta.url));
+  return join(here, '..', '..', 'scripts', 'pdf_renderer.py');
+}
+
+function resolveDefaultPythonBin(): string {
+  // Use the hermes venv where weasyprint is installed in dev VM.
+  return process.env.RESILIPLAN_PYTHON_BIN ?? 'python3';
+}
+
+function buildSkeleton(plan: ExportPlan): string {
+  const parts: string[] = [];
+  for (const section of plan.sections ?? []) {
+    parts.push(`=== SECTION: ${section.title} ===`);
+    parts.push(section.contentMarkdown);
+    parts.push(`> Mapping: ${section.isoClause}`);
+    parts.push('');
+  }
+  return parts.join('\n');
+}
+
+export async function renderRichPdfPayload(
+  plan: ExportPlan & { id?: string; description?: string; createdAt?: Date | string; updatedAt?: Date | string },
+  options: RichPdfOptions = {},
+): Promise<ExportPayload> {
+  const pythonBin = options.pythonBin ?? resolveDefaultPythonBin();
+  const scriptPath = options.scriptPath ?? resolveScriptPath();
+  const branding = { ...DEFAULT_BRANDING, ...(options.branding ?? {}) };
+
+  const planJson = {
+    id: plan.id ?? plan.serviceName,
+    title: plan.title,
+    serviceName: plan.serviceName,
+    serviceOwner: plan.serviceOwner,
+    description: plan.description ?? '',
+    criticality: plan.criticality,
+    rtoMinutes: plan.rtoMinutes,
+    rpoMinutes: plan.rpoMinutes,
+    status: plan.status,
+    createdAt: plan.createdAt ? (plan.createdAt instanceof Date ? plan.createdAt.toISOString() : plan.createdAt) : '—',
+    updatedAt: plan.updatedAt ? (plan.updatedAt instanceof Date ? plan.updatedAt.toISOString() : plan.updatedAt) : '—',
+    quality: options.quality,
+  };
+  const skelJson = { skeleton: buildSkeleton(plan) };
+  const brandingJson = branding;
+
+  const workdir = await mkdtemp(join(tmpdir(), 'resiliplan-pdf-'));
+  const planPath = join(workdir, 'plan.json');
+  const skelPath = join(workdir, 'skel.json');
+  const brandingPath = join(workdir, 'branding.json');
+  const outPath = join(workdir, 'output.pdf');
+
+  try {
+    await writeFile(planPath, JSON.stringify(planJson, null, 2), 'utf8');
+    await writeFile(skelPath, JSON.stringify(skelJson, null, 2), 'utf8');
+    await writeFile(brandingPath, JSON.stringify(brandingJson, null, 2), 'utf8');
+
+    await new Promise<void>((resolve, reject) => {
+      const env = { ...process.env, ...(options.weasyprintBin ? { WEASYPRINT_BIN: options.weasyprintBin } : {}) };
+      const child = spawn(pythonBin, [scriptPath, planPath, skelPath, brandingPath, outPath], {
+        env,
+        stdio: ['ignore', 'pipe', 'pipe'],
+      });
+      let stderr = '';
+      child.stderr.on('data', (chunk) => { stderr += chunk.toString(); });
+      child.on('error', (err) => reject(new Error(`Failed to spawn PDF renderer: ${err.message}`)));
+      child.on('close', (code) => {
+        if (code === 0) resolve();
+        else reject(new Error(`PDF renderer exited ${code}: ${stderr.slice(-500)}`));
+      });
+    });
+
+    const body = await readFile(outPath);
+    return { filename: safeFilename(plan.serviceName, 'pdf'), contentType: 'application/pdf', body };
+  } finally {
+    await rm(workdir, { recursive: true, force: true }).catch(() => undefined);
+  }
+}
+
 export type ExportSection = {
   title: string;
   isoClause: string;
@@ -20,6 +120,32 @@ export type ExportPayload = {
   filename: string;
   contentType: string;
   body: string | Buffer;
+};
+
+export type ExportBranding = {
+  companyName?: string;
+  companyTagline?: string;
+  logoBase64?: string;
+  primaryColor?: string;
+  accentColor?: string;
+  documentFooter?: string;
+  defaultDocumentPrefix?: string;
+  hidePlatformBranding?: boolean;
+  documentClassification?: 'public' | 'internal' | 'confidential' | 'restricted';
+};
+
+export type ExportQuality = {
+  score: number;
+  status: string;
+  signals: Array<{ key: string; label: string; passed: boolean; weight: number; detail: string }>;
+};
+
+export type RichPdfOptions = {
+  branding?: ExportBranding;
+  quality?: ExportQuality;
+  pythonBin?: string;
+  scriptPath?: string;
+  weasyprintBin?: string;
 };
 
 function safeFilename(name: string, extension: string): string {

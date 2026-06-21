@@ -5,7 +5,8 @@ import { config } from '../config/index.js';
 import { db } from '../db/client.js';
 import { approvals, auditLogs, drpPlans, drpSections, emailOutbox, notifications, planComments, planEvidence, planVersions, users } from '../db/schema/index.js';
 import { ISO_22301_SECTIONS, defaultSectionContent } from '../drp/iso-template.js';
-import { renderDocxPayload, renderMarkdownPayload, renderPdfPayload } from '../drp/export-service.js';
+import { tenants } from '../db/schema/index.js';
+import { renderDocxPayload, renderMarkdownPayload, renderPdfPayload, renderRichPdfPayload } from '../drp/export-service.js';
 import { evaluateDrpQuality } from '../drp/quality-service.js';
 import { requireAuth, requireRole } from '../auth/auth-service.js';
 import { createCommentSchema, extractMentionedEmails, summarizeComments, updateCommentSchema } from '../comments/comment-service.js';
@@ -361,9 +362,31 @@ export async function planRoutes(app: FastifyInstance) {
     const { id } = z.object({ id: z.string().uuid() }).parse(req.params);
     const plan = await getPlanWithSections(id, user.tenantId);
     if (!plan) return reply.code(404).send({ type: 'about:blank', title: 'Not Found', status: 404, detail: 'Plan not found', instance: req.id });
-    const payload = renderPdfPayload(plan);
-    reply.type(payload.contentType).header('Content-Disposition', `attachment; filename="${payload.filename}"`);
-    return payload.body;
+
+    // Load tenant branding for whitelabel cover page
+    const [tenant] = await db.select().from(tenants).where(eq(tenants.id, user.tenantId)).limit(1);
+    const tenantSettings = (tenant?.settings ?? {}) as { branding?: Record<string, unknown> };
+    const branding = (tenantSettings.branding ?? {}) as {
+      companyName?: string; companyTagline?: string; logoBase64?: string;
+      primaryColor?: string; accentColor?: string; documentFooter?: string;
+      defaultDocumentPrefix?: string; hidePlatformBranding?: boolean;
+      documentClassification?: 'public' | 'internal' | 'confidential' | 'restricted';
+    };
+
+    // Compute quality score for the cover page
+    const quality = evaluateDrpQuality(plan);
+
+    try {
+      const payload = await renderRichPdfPayload(plan, { branding, quality });
+      reply.type(payload.contentType).header('Content-Disposition', `attachment; filename="${payload.filename}"`);
+      return reply.send(payload.body);
+    } catch (err) {
+      // Fallback to placeholder PDF if Python renderer unavailable
+      req.log.warn({ err: err instanceof Error ? err.message : String(err) }, 'Rich PDF render failed, falling back to placeholder');
+      const payload = renderPdfPayload(plan);
+      reply.type(payload.contentType).header('Content-Disposition', `attachment; filename="${payload.filename}"`);
+      return reply.send(payload.body);
+    }
   });
 
   app.get('/api/v1/plans/:id/export/docx', async (req, reply) => {
