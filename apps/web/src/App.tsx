@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, NavLink as RouterNavLink, Route, Routes, useLocation, useNavigate, useParams } from 'react-router-dom';
-import { Activity, AlertTriangle, Bell, Calendar, CheckCircle2, ChevronRight, Compass, CreditCard, Download, FileText, Home, Lock, LogOut, Mail, Moon, Save, Send, Server, Settings, Sparkles, Sun, Upload, Users, Wand2 } from 'lucide-react';
+import { Activity, AlertTriangle, Bell, Calendar, CheckCircle2, ChevronRight, Compass, CreditCard, Download, FileText, Home, ListOrdered, Lock, LogOut, Mail, Moon, Save, Send, Server, Settings, Sparkles, Sun, TestTube2, Upload, Users, Wand2 } from 'lucide-react';
 import {
   ActivityTimeline,
   Avatar,
@@ -737,6 +737,9 @@ function PlanEditor() {
   const [replyTo, setReplyTo] = useState<string | null>(null);
   const [aiSuggestion, setAiSuggestion] = useState('');
   const [aiLoading, setAiLoading] = useState(false);
+  const [aiMode, setAiMode] = useState<'draft' | 'improve' | 'steps' | 'test' | 'comms' | 'escalation'>('draft');
+  const [stepsLoading, setStepsLoading] = useState(false);
+  const [testsLoading, setTestsLoading] = useState(false);
   const [strategyOpen, setStrategyOpen] = useState(false);
   const [strategyLoading, setStrategyLoading] = useState(false);
   const [strategyResult, setStrategyResult] = useState<{ recommendation: Record<string, unknown>; raw: string } | null>(null);
@@ -892,6 +895,11 @@ function PlanEditor() {
           section: section.title,
           context: `${plan.title} / ${plan.serviceName} / RTO ${plan.rtoMinutes} minutes / RPO ${plan.rpoMinutes} minutes`,
           prompt: `Draft or improve this ISO 22301 DRP section. Existing content:\n\n${draft || '(empty)'}`,
+          mode: aiMode,
+          serviceName: plan.serviceName,
+          rtoMinutes: plan.rtoMinutes,
+          rpoMinutes: plan.rpoMinutes,
+          criticality: plan.criticality,
         }),
       });
       if (!res.ok) throw new Error(await res.text());
@@ -912,6 +920,53 @@ function PlanEditor() {
     if (!aiSuggestion.trim()) return;
     updateDraft(aiSuggestion);
     toast.info('AI suggestion applied', { description: 'Click Save to persist to server.' });
+  }
+  async function fetchRecoverySteps() {
+    if (!plan || !id || stepsLoading) return;
+    setStepsLoading(true);
+    try {
+      const csrf = cookieValue('resiliplan_csrf');
+      const res = await fetch('/api/v1/ai/recovery-steps', {
+        method: 'POST', credentials: 'include',
+        headers: { 'Content-Type': 'application/json', ...(csrf ? { 'X-CSRF-Token': decodeURIComponent(csrf) } : {}) },
+        body: JSON.stringify({
+          serviceName: plan.serviceName,
+          serviceDescription: (plan as { description?: string }).description ?? undefined,
+          rtoMinutes: plan.rtoMinutes,
+          rpoMinutes: plan.rpoMinutes,
+          strategy: (plan as { recoveryStrategy?: string }).recoveryStrategy || undefined,
+          stepsCount: 18,
+        }),
+      });
+      if (!res.ok) { const t = await res.text(); throw new Error(t || 'Recovery steps request failed'); }
+      const data = await res.json() as { steps: string };
+      setAiSuggestion(data.steps);
+      toast.success('Recovery steps generated', { description: 'Review and apply to your draft.' });
+    } catch (err) {
+      toast.error('Recovery steps failed', { description: err instanceof Error ? err.message : 'Unknown error' });
+    } finally { setStepsLoading(false); }
+  }
+  async function fetchTestScenarios() {
+    if (!plan || !id || testsLoading) return;
+    setTestsLoading(true);
+    try {
+      const csrf = cookieValue('resiliplan_csrf');
+      const res = await fetch('/api/v1/ai/test-scenarios', {
+        method: 'POST', credentials: 'include',
+        headers: { 'Content-Type': 'application/json', ...(csrf ? { 'X-CSRF-Token': decodeURIComponent(csrf) } : {}) },
+        body: JSON.stringify({
+          serviceName: plan.serviceName,
+          serviceDescription: (plan as { description?: string }).description ?? undefined,
+          strategy: (plan as { recoveryStrategy?: string }).recoveryStrategy || undefined,
+        }),
+      });
+      if (!res.ok) { const t = await res.text(); throw new Error(t || 'Test scenarios request failed'); }
+      const data = await res.json() as { tests: string };
+      setAiSuggestion(data.tests);
+      toast.success('Test scenarios generated', { description: 'Review and apply to your draft.' });
+    } catch (err) {
+      toast.error('Test scenarios failed', { description: err instanceof Error ? err.message : 'Unknown error' });
+    } finally { setTestsLoading(false); }
   }
   async function fetchStrategy() {
     if (!plan || !id) return;
@@ -995,7 +1050,31 @@ function PlanEditor() {
           <h2 className="font-semibold">{section?.title}</h2>
           <p className="text-xs text-muted-foreground">Compliance: {section?.isoClause}</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          {section?.sectionKey === 'recovery' && (
+            <Button variant="ghost" size="sm" onClick={fetchRecoverySteps} disabled={stepsLoading || aiLoading} leftIcon={<ListOrdered className="h-3.5 w-3.5" />}>
+              {stepsLoading ? 'Generating…' : 'Generate steps'}
+            </Button>
+          )}
+          {section?.sectionKey === 'testing' && (
+            <Button variant="ghost" size="sm" onClick={fetchTestScenarios} disabled={testsLoading || aiLoading} leftIcon={<TestTube2 className="h-3.5 w-3.5" />}>
+              {testsLoading ? 'Generating…' : 'Generate test scenarios'}
+            </Button>
+          )}
+          <select
+            value={aiMode}
+            onChange={(e) => setAiMode(e.target.value as typeof aiMode)}
+            title="AI suggestion mode"
+            aria-label="AI suggestion mode"
+            className="h-8 rounded-md border border-border/60 bg-card/40 px-2 text-xs text-muted-foreground outline-none focus:border-primary/50"
+          >
+            <option value="draft">Draft</option>
+            <option value="improve">Improve</option>
+            <option value="steps">Steps</option>
+            <option value="test">Test</option>
+            <option value="comms">Comms</option>
+            <option value="escalation">Escalation</option>
+          </select>
           <Button variant="ghost" size="sm" onClick={suggestWithAI} disabled={aiLoading} leftIcon={<Sparkles className="h-3.5 w-3.5" />}>
             {aiLoading ? 'AI drafting…' : 'AI Suggest'}
           </Button>
