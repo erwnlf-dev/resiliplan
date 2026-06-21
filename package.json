@@ -5,10 +5,10 @@
   "private": true,
   "license": "MIT",
   "author": "Erwin Alifiansyah <[email protected]>",
-  "homepage": "https://github.com/datacomm-diangraha/resiliplan",
+  "homepage": "https://github.com/erwnlf-dev/resiliplan",
   "repository": {
     "type": "git",
-    "url": "https://github.com/datacomm-diangraha/resiliplan.git"
+    "url": "https://github.com/erwnlf-dev/resiliplan.git"
   },
   "bugs": {
     "url": "https://github.com/datacomm-diangraha/resiliplan/issues"
