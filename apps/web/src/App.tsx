@@ -42,8 +42,11 @@ type DrpQualityScore = { score: number; status: 'weak' | 'fair' | 'good' | 'read
 type PlanEvidenceItem = { id: string; planId: string; sectionKey?: string | null; title: string; evidenceUrl: string; evidenceType: string; notes: string; createdAt: string };
 type BackupSummary = { backupDir: string; count: number; latest: null | { file: string; path: string; sizeBytes: number; modifiedAt: string; checksumFile: boolean }; latestAgeHours: number | null; status: string; backups: Array<{ file: string; path: string; sizeBytes: number; modifiedAt: string; checksumFile: boolean }>; error?: string };
 
-const API = import.meta.env.VITE_API_URL ?? `${window.location.protocol}//${window.location.hostname}:3001`;
-const COLLAB_WS = import.meta.env.VITE_COLLAB_WS_URL ?? `ws://${window.location.hostname}:3002`;
+// In production behind a same-origin reverse proxy (e.g. Nginx on :8080), use
+// empty string so the browser hits `${path}` (which already starts with /api).
+// Override with VITE_API_URL for dev or split-origin deployments.
+const API = import.meta.env.VITE_API_URL ?? '';
+const COLLAB_WS = import.meta.env.VITE_COLLAB_WS_URL ?? `${window.location.protocol === 'https:' ? 'wss' : 'ws'}://${window.location.host}/collab`;
 
 function cookieValue(name: string): string | undefined {
   return document.cookie
