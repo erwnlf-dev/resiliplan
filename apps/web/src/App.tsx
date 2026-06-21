@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, NavLink as RouterNavLink, Route, Routes, useLocation, useNavigate, useParams } from 'react-router-dom';
-import { Activity, AlertTriangle, Bell, Calendar, CheckCircle2, ChevronRight, Compass, CreditCard, Download, FileText, Home, ListOrdered, Lock, LogOut, Mail, Menu, Moon, Save, Send, Server, Settings, Sparkles, Sun, TestTube2, Upload, Users, Wand2, X } from 'lucide-react';
+import { Activity, AlertTriangle, Bell, Calendar, CheckCircle2, ChevronRight, Compass, CreditCard, Download, FileText, Home, ListOrdered, Lock, LogOut, Mail, Menu, Moon, Plug, Save, Send, Server, Settings, Sparkles, Sun, TestTube2, Upload, Users, Wand2, X } from 'lucide-react';
 import {
   ActivityTimeline,
   Avatar,
@@ -219,6 +219,7 @@ const SIDEBAR_GROUPS: { label: string; items: { label: string; to: string; icon:
     label: 'System',
     items: [
       { label: 'AI Providers', to: '/ai-providers', icon: <Sparkles className="h-4 w-4" /> },
+      { label: 'Integrations', to: '/integrations', icon: <Plug className="h-4 w-4" /> },
       { label: 'Settings', to: '/settings', icon: <Settings className="h-4 w-4" /> },
       { label: 'Security', to: '/security', icon: <Lock className="h-4 w-4" /> },
     ],
@@ -336,6 +337,7 @@ function Shell({ user, onUserUpdate, onLogout }: { user: User; onUserUpdate: (us
           <Route path="/readiness" element={<ReadinessPage />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="/ai-providers" element={<AIProvidersPage />} />
+          <Route path="/integrations" element={<IntegrationsPage />} />
           <Route path="/security" element={<SecurityPage user={user} onUserUpdate={onUserUpdate} />} />
           <Route path="*" element={<NotFound />} />
         </Routes></main>
@@ -2157,6 +2159,447 @@ function EmailOutboxPage() {
       )}
     </>}
   </div>;
+}
+
+type IntegrationCatalogEntry = {
+  type: string;
+  direction: 'inbound' | 'outbound' | 'bidirectional';
+  displayName: string;
+  description: string;
+  openSource: boolean;
+  homepage: string;
+  configSchema: Record<string, { type: string; required?: boolean; secret?: boolean; default?: unknown; description?: string; enum?: string[] }>;
+  eventSubscriptions?: string[];
+};
+
+type IntegrationRow = {
+  id: string;
+  type: string;
+  direction: 'inbound' | 'outbound' | 'bidirectional';
+  name: string;
+  description?: string | null;
+  status: 'active' | 'paused' | 'error' | 'pending_setup';
+  isEnabled: boolean;
+  config: Record<string, unknown>;
+  lastSyncAt?: string | null;
+  lastError?: string | null;
+  consecutiveFailures: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
+type IntegrationSync = {
+  id: string;
+  trigger: string;
+  status: 'running' | 'success' | 'failed' | 'partial' | 'cancelled';
+  startedAt: string;
+  completedAt?: string | null;
+  durationMs?: number | null;
+  rowsAffected: number;
+  rowsCreated: number;
+  rowsUpdated: number;
+  rowsSkipped: number;
+  error?: string | null;
+};
+
+function IntegrationsPage() {
+  const [integrations, setIntegrations] = useState<IntegrationRow[]>([]);
+  const [catalog, setCatalog] = useState<IntegrationCatalogEntry[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [showAdd, setShowAdd] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [historyId, setHistoryId] = useState<string | null>(null);
+  const [history, setHistory] = useState<IntegrationSync[]>([]);
+  const [busy, setBusy] = useState(false);
+  const toast = useToast();
+
+  async function load() {
+    setLoading(true);
+    setError('');
+    try {
+      const [list, cat] = await Promise.all([
+        api<{ integrations: IntegrationRow[] }>('/api/v1/integrations'),
+        api<{ integrations: IntegrationCatalogEntry[] }>('/api/v1/integrations/catalog'),
+      ]);
+      setIntegrations(list.integrations);
+      setCatalog(cat.integrations);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load integrations');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => { void load(); }, []);
+
+  async function loadHistory(id: string) {
+    setHistoryId(id);
+    try {
+      const data = await api<{ syncs: IntegrationSync[] }>(`/api/v1/integrations/${id}/syncs`);
+      setHistory(data.syncs);
+    } catch (err) {
+      toast.error('Failed to load sync history', { description: err instanceof Error ? err.message : '' });
+    }
+  }
+
+  async function runSync(id: string) {
+    setBusy(true);
+    try {
+      const result = await api<{ status: string; rowsCreated?: number; rowsUpdated?: number; rowsSkipped?: number; error?: string }>(`/api/v1/integrations/${id}/sync`, { method: 'POST' });
+      if (result.status === 'success') {
+        toast.success('Sync completed', { description: `Created ${result.rowsCreated ?? 0} / updated ${result.rowsUpdated ?? 0}` });
+      } else {
+        toast.error('Sync failed', { description: result.error ?? 'Unknown error' });
+      }
+      await load();
+      if (historyId === id) await loadHistory(id);
+    } catch (err) {
+      toast.error('Sync request failed', { description: err instanceof Error ? err.message : '' });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function toggleEnabled(row: IntegrationRow) {
+    try {
+      await api(`/api/v1/integrations/${row.id}`, { method: 'PATCH', body: JSON.stringify({ isEnabled: !row.isEnabled }) });
+      await load();
+      toast.success(row.isEnabled ? 'Integration paused' : 'Integration enabled');
+    } catch (err) {
+      toast.error('Toggle failed', { description: err instanceof Error ? err.message : '' });
+    }
+  }
+
+  async function remove(row: IntegrationRow) {
+    if (!confirm(`Delete integration "${row.name}"? This will also clear all sync history. This action cannot be undone.`)) return;
+    try {
+      await api(`/api/v1/integrations/${row.id}`, { method: 'DELETE' });
+      await load();
+      if (historyId === row.id) setHistoryId(null);
+      toast.success('Integration deleted');
+    } catch (err) {
+      toast.error('Delete failed', { description: err instanceof Error ? err.message : '' });
+    }
+  }
+
+  const catalogByType = useMemo(() => Object.fromEntries(catalog.map((c) => [c.type, c])), [catalog]);
+
+  return (
+    <div className="space-y-6">
+      <PageHeader
+        eyebrow={<>System · Integrations</>}
+        title="External Integrations"
+        description="Connect ResiliPlan ke open-source ITSM, monitoring, CMDB, ChatOps, dan backup systems. 14+ integrations supported, 100% open-source (kecuali Acronis)."
+        breadcrumbs={[{ label: 'Integrations' }]}
+        actions={
+          <Button variant="primary" size="md" onClick={() => setShowAdd(true)} leftIcon={<Plug className="h-4 w-4" />}>
+            Add integration
+          </Button>
+        }
+      />
+
+      {error && <ErrorBox message={error} />}
+
+      {/* Stats */}
+      <div className="grid gap-3 md:grid-cols-4">
+        <KpiCard label="Total" value={`${integrations.length}`} hint="configured" tone="primary" />
+        <KpiCard label="Active" value={`${integrations.filter((i) => i.status === 'active').length}`} hint="last sync OK" tone="success" />
+        <KpiCard label="Error" value={`${integrations.filter((i) => i.status === 'error').length}`} hint="needs attention" tone={integrations.some((i) => i.status === 'error') ? 'warning' : 'success'} />
+        <KpiCard label="Paused" value={`${integrations.filter((i) => !i.isEnabled).length}`} hint="user-disabled" tone="info" />
+      </div>
+
+      {/* Catalog browser */}
+      {catalog.length > 0 && integrations.length === 0 && !loading && (
+        <div className="surface surface-lift p-5">
+          <h2 className="font-semibold">Get started — pick an integration</h2>
+          <p className="mt-1 text-sm text-muted-foreground">14+ supported integrations. Click any to add.</p>
+          <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+            {catalog.slice(0, 9).map((c) => (
+              <button
+                key={c.type}
+                type="button"
+                onClick={() => setShowAdd(true)}
+                className="surface surface-lift flex items-start gap-3 p-3 text-left transition-all hover:border-primary/40 hover:shadow-soft"
+              >
+                <div className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-xs font-semibold ${c.openSource ? 'bg-emerald-500/15 text-emerald-300' : 'bg-amber-500/15 text-amber-300'}`}>
+                  {c.direction === 'inbound' ? '→' : c.direction === 'outbound' ? '←' : '↔'}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <div className="font-medium text-sm">{c.displayName}</div>
+                    {!c.openSource && <span className="rounded bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-amber-300">proprietary</span>}
+                  </div>
+                  <div className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">{c.description}</div>
+                </div>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* List */}
+      {loading ? <SkeletonList rows={3} /> : integrations.length === 0 ? null : (
+        <div className="surface surface-lift">
+          <div className="border-b p-4 font-semibold">Configured integrations</div>
+          <div className="divide-y">
+            {integrations.map((row) => {
+              const cat = catalogByType[row.type];
+              const dirIcon = row.direction === 'inbound' ? '→' : row.direction === 'outbound' ? '←' : '↔';
+              const statusTone =
+                row.status === 'active' ? 'completed' :
+                row.status === 'error' ? 'failed' :
+                row.status === 'paused' ? 'queued' : 'draft';
+              return (
+                <div key={row.id} className="p-4">
+                  <div className="flex items-start gap-3">
+                    <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-md text-base font-semibold ${cat?.openSource === false ? 'bg-amber-500/15 text-amber-300' : 'bg-emerald-500/15 text-emerald-300'}`}>
+                      {dirIcon}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <div className="font-medium">{row.name}</div>
+                        <StatusBadge status={statusTone} label={row.status} />
+                        {!row.isEnabled && <StatusBadge status="queued" label="paused" />}
+                        {row.consecutiveFailures > 0 && (
+                          <span className="rounded bg-red-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-red-300">
+                            {row.consecutiveFailures}× failures
+                          </span>
+                        )}
+                      </div>
+                      <div className="mt-1 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+                        <span className="font-mono">{row.type}</span>
+                        <span>·</span>
+                        <span className="capitalize">{row.direction}</span>
+                        {cat && <><span>·</span><a href={cat.homepage} target="_blank" rel="noreferrer" className="hover:underline">{cat.homepage.replace('https://', '')}</a></>}
+                        {row.lastSyncAt && (
+                          <>
+                            <span>·</span>
+                            <span>last sync: {new Date(row.lastSyncAt).toLocaleString()}</span>
+                          </>
+                        )}
+                      </div>
+                      {row.lastError && (
+                        <div className="mt-2 rounded-md border border-red-500/30 bg-red-500/10 p-2 text-xs text-red-200">
+                          <span className="font-semibold">Last error:</span> {row.lastError}
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex shrink-0 items-center gap-1.5">
+                      <Button variant="ghost" size="sm" onClick={() => runSync(row.id)} disabled={busy} leftIcon={<Activity className="h-3.5 w-3.5" />}>
+                        Sync
+                      </Button>
+                      <Button variant="ghost" size="sm" onClick={() => void loadHistory(row.id)} leftIcon={<FileText className="h-3.5 w-3.5" />}>
+                        History
+                      </Button>
+                      <Button variant="ghost" size="sm" onClick={() => toggleEnabled(row)}>
+                        {row.isEnabled ? 'Pause' : 'Enable'}
+                      </Button>
+                      <Button variant="ghost" size="sm" onClick={() => setEditingId(row.id)} leftIcon={<Settings className="h-3.5 w-3.5" />}>
+                        Edit
+                      </Button>
+                      <Button variant="ghost" size="sm" onClick={() => remove(row)} leftIcon={<X className="h-3.5 w-3.5" />}>
+                        Delete
+                      </Button>
+                    </div>
+                  </div>
+
+                  {/* Inline history */}
+                  {historyId === row.id && (
+                    <div className="mt-3 rounded-md border bg-muted/30 p-3 text-xs">
+                      <div className="mb-2 flex items-center justify-between">
+                        <span className="font-semibold">Sync history (latest 50)</span>
+                        <button type="button" onClick={() => setHistoryId(null)} className="text-muted-foreground hover:text-foreground">Close</button>
+                      </div>
+                      {history.length === 0 ? (
+                        <div className="text-muted-foreground">No sync history yet</div>
+                      ) : (
+                        <div className="space-y-1">
+                          {history.map((s) => (
+                            <div key={s.id} className="grid grid-cols-12 gap-2 border-b border-border/40 py-1 last:border-0">
+                              <span className="col-span-3 font-mono text-muted-foreground">{new Date(s.startedAt).toLocaleString()}</span>
+                              <span className="col-span-1"><StatusBadge status={s.status === 'success' ? 'completed' : s.status === 'failed' ? 'failed' : 'in_review'} label={s.status} /></span>
+                              <span className="col-span-1 capitalize">{s.trigger}</span>
+                              <span className="col-span-2 text-muted-foreground">{s.durationMs ? `${s.durationMs}ms` : '—'}</span>
+                              <span className="col-span-2">+{s.rowsCreated} ~{s.rowsUpdated} ={s.rowsSkipped}</span>
+                              <span className="col-span-3 truncate text-red-300">{s.error ?? ''}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Add / Edit Modal */}
+      {(showAdd || editingId) && (
+        <IntegrationFormModal
+          catalog={catalog}
+          editing={editingId ? integrations.find((i) => i.id === editingId) ?? null : null}
+          onClose={() => { setShowAdd(false); setEditingId(null); }}
+          onSaved={() => { setShowAdd(false); setEditingId(null); void load(); }}
+        />
+      )}
+    </div>
+  );
+}
+
+function IntegrationFormModal({
+  catalog,
+  editing,
+  onClose,
+  onSaved,
+}: {
+  catalog: IntegrationCatalogEntry[];
+  editing: IntegrationRow | null;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const isEdit = !!editing;
+  const [type, setType] = useState(editing?.type ?? catalog[0]?.type ?? '');
+  const [name, setName] = useState(editing?.name ?? '');
+  const [description, setDescription] = useState(editing?.description ?? '');
+  const [isEnabled, setIsEnabled] = useState(editing?.isEnabled ?? true);
+  const [configJson, setConfigJson] = useState(() => {
+    if (editing) return JSON.stringify(editing.config, null, 2);
+    return JSON.stringify({}, null, 2);
+  });
+  const [error, setError] = useState('');
+  const [saving, setSaving] = useState(false);
+  const toast = useToast();
+
+  const cat = catalog.find((c) => c.type === type);
+  const direction = cat?.direction ?? 'inbound';
+
+  // When type changes, reset config to schema defaults
+  useEffect(() => {
+    if (isEdit) return;
+    if (!cat) return;
+    const defaults: Record<string, unknown> = {};
+    for (const [k, def] of Object.entries(cat.configSchema)) {
+      if (def.default !== undefined) defaults[k] = def.default;
+    }
+    setConfigJson(JSON.stringify(defaults, null, 2));
+  }, [type, isEdit, cat]);
+
+  async function save() {
+    setError('');
+    let parsedConfig: Record<string, unknown>;
+    try {
+      parsedConfig = JSON.parse(configJson);
+    } catch (err) {
+      setError(`Config JSON invalid: ${err instanceof Error ? err.message : 'parse error'}`);
+      return;
+    }
+    setSaving(true);
+    try {
+      if (isEdit && editing) {
+        await api(`/api/v1/integrations/${editing.id}`, { method: 'PATCH', body: JSON.stringify({ name, description, isEnabled, config: parsedConfig }) });
+        toast.success('Integration updated');
+      } else {
+        await api('/api/v1/integrations', { method: 'POST', body: JSON.stringify({ type, direction, name: name || cat?.displayName || type, description, isEnabled, config: parsedConfig }) });
+        toast.success('Integration created');
+      }
+      onSaved();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Save failed');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Modal open onClose={onClose} title={isEdit ? `Edit ${editing?.name}` : 'Add integration'}>
+      <div className="space-y-4">
+        {error && <ErrorBox message={error} />}
+
+        {!isEdit && (
+          <div>
+            <label className="text-sm font-medium">Integration type</label>
+            <div className="mt-2 grid gap-2 sm:grid-cols-2 max-h-72 overflow-y-auto">
+              {catalog.map((c) => (
+                <button
+                  key={c.type}
+                  type="button"
+                  onClick={() => setType(c.type)}
+                  className={`surface surface-lift flex items-start gap-2 p-2 text-left text-sm transition-all ${type === c.type ? 'border-primary/60 bg-primary/10' : 'hover:border-primary/30'}`}
+                >
+                  <span className="text-base">{c.direction === 'inbound' ? '→' : c.direction === 'outbound' ? '←' : '↔'}</span>
+                  <div className="min-w-0 flex-1">
+                    <div className="font-medium">{c.displayName}</div>
+                    <div className="line-clamp-1 text-xs text-muted-foreground">{c.description}</div>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <div>
+          <label className="text-sm font-medium">Name</label>
+          <input value={name} onChange={(e) => setName(e.target.value)} className="input mt-1 w-full" placeholder={cat?.displayName ?? 'My integration'} />
+        </div>
+
+        <div>
+          <label className="text-sm font-medium">Description (optional)</label>
+          <input value={description} onChange={(e) => setDescription(e.target.value)} className="input mt-1 w-full" placeholder="What this integration is for" />
+        </div>
+
+        <div>
+          <div className="flex items-center justify-between">
+            <label className="text-sm font-medium">Config (JSON)</label>
+            {cat && (
+              <span className="text-xs text-muted-foreground">
+                {Object.keys(cat.configSchema).length} field(s) · secrets marked with <span className="font-mono">***</span>
+              </span>
+            )}
+          </div>
+          <textarea
+            value={configJson}
+            onChange={(e) => setConfigJson(e.target.value)}
+            className="input mt-1 h-40 w-full font-mono text-xs"
+            spellCheck={false}
+          />
+          {cat && (
+            <details className="mt-2">
+              <summary className="cursor-pointer text-xs text-muted-foreground hover:text-foreground">Show schema</summary>
+              <div className="mt-2 rounded-md border bg-muted/30 p-3 text-xs space-y-2">
+                {Object.entries(cat.configSchema).map(([k, def]) => (
+                  <div key={k}>
+                    <div className="font-mono font-semibold">
+                      {k}
+                      {def.required && <span className="ml-1 text-red-400">*</span>}
+                      {def.secret && <span className="ml-1 rounded bg-amber-500/20 px-1 text-[10px] text-amber-300">secret</span>}
+                    </div>
+                    {def.description && <div className="text-muted-foreground">{def.description}</div>}
+                    {def.enum && <div className="font-mono text-muted-foreground">options: {def.enum.join(' | ')}</div>}
+                    {def.default !== undefined && <div className="font-mono text-muted-foreground">default: {JSON.stringify(def.default)}</div>}
+                  </div>
+                ))}
+              </div>
+            </details>
+          )}
+        </div>
+
+        <label className="flex items-center gap-2 text-sm">
+          <input type="checkbox" checked={isEnabled} onChange={(e) => setIsEnabled(e.target.checked)} className="h-4 w-4" />
+          Enabled
+        </label>
+
+        <div className="flex justify-end gap-2 border-t pt-3">
+          <Button variant="ghost" onClick={onClose} disabled={saving}>Cancel</Button>
+          <Button variant="primary" onClick={save} disabled={saving || !type}>
+            {saving ? 'Saving...' : isEdit ? 'Save changes' : 'Create integration'}
+          </Button>
+        </div>
+      </div>
+    </Modal>
+  );
 }
 
 function AuditTrailPage() {

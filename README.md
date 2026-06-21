@@ -199,6 +199,7 @@ resiliplan/
 | [docs/architecture.md](./docs/architecture.md) | Tech architecture detail |
 | [docs/ai-integration.md](./docs/ai-integration.md) | AI layer design, provider config |
 | [docs/integrations.md](./docs/integrations.md) | Open source integrations (NetBox, Prometheus, Mattermost, etc) |
+| [docs/operational.md](./docs/operational.md) | Day-to-day operations runbook, incident response, on-call |
 | [docs/data-model.md](./docs/data-model.md) | Drizzle schema + ERD |
 | [docs/ui-design.md](./docs/ui-design.md) | Design system + screen catalog |
 | [docs/dr-plan.md](./docs/dr-plan.md) | ResiliPlan's own DR plan (meta-DR) |
