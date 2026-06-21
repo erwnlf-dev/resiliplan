@@ -18,6 +18,10 @@ Prepare ResiliPlan for controlled internal use at PT Datacomm Diangraha while ke
 - Evidence attachment links per plan/section.
 - Searchable/exportable audit trail.
 - Backup dashboard reading latest daily dump/checksum state.
+- Real backup/restore verification script aligned to repo backup directory and current schema.
+- First-run/admin bootstrap status on readiness page.
+- Governed email outbox processing packet, still no automatic SMTP send.
+- BIA-to-DRP RTO/RPO alignment gap signal.
 
 ## Confirmed internal launch decisions
 - Access URL: direct VM IP and port for now.

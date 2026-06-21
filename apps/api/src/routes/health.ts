@@ -11,7 +11,7 @@ import { join } from 'node:path';
 import { count, eq } from 'drizzle-orm';
 import { config } from '../config/index.js';
 import { db, pool } from '../db/client.js';
-import { drpPlans, notifications, recoveryDrills, serviceRisks, users } from '../db/schema/index.js';
+import { drpPlans, notifications, recoveryDrills, serviceRisks, tenants, users } from '../db/schema/index.js';
 import { requireAuth } from '../auth/auth-service.js';
 import { evaluateProductionReadiness } from '../readiness/readiness-service.js';
 
@@ -19,6 +19,20 @@ export async function healthRoutes(app: FastifyInstance) {
   // Liveness — is the process alive?
   app.get('/api/health/live', async () => {
     return { status: 'ok', timestamp: new Date().toISOString() };
+  });
+
+  app.get('/api/v1/bootstrap/status', async () => {
+    const [tenantCount] = await db.select({ value: count() }).from(tenants);
+    const [userCount] = await db.select({ value: count() }).from(users);
+    const [adminCount] = await db.select({ value: count() }).from(users).where(eq(users.role, 'admin'));
+    return {
+      needsBootstrap: (tenantCount?.value ?? 0) === 0 || (userCount?.value ?? 0) === 0 || (adminCount?.value ?? 0) === 0,
+      tenantCount: tenantCount?.value ?? 0,
+      userCount: userCount?.value ?? 0,
+      adminCount: adminCount?.value ?? 0,
+      bootstrapCommand: 'pnpm --filter @resiliplan/api run db:seed',
+      defaultSeedWarning: 'Set SEED_ADMIN_EMAIL and SEED_ADMIN_PASSWORD before running seed in production.',
+    };
   });
 
   // Readiness — can we serve requests?

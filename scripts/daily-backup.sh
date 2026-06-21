@@ -7,15 +7,40 @@ RETENTION_DAYS="${RETENTION_DAYS:-14}"
 TIMESTAMP="$(date +%Y%m%d_%H%M%S)"
 ENV_FILE="$ROOT/.env"
 
-if [[ -f "$ENV_FILE" ]]; then
-  # shellcheck disable=SC1090
-  set -a && source "$ENV_FILE" && set +a
+if [[ -z "${DATABASE_URL:-}" && -f "$ENV_FILE" ]]; then
+  DATABASE_URL="$(node - "$ENV_FILE" <<'NODE'
+const fs = require('fs');
+const file = process.argv[2];
+const text = fs.readFileSync(file, 'utf8');
+for (const raw of text.split(/\r?\n/)) {
+  const line = raw.trim();
+  if (!line || line.startsWith('#')) continue;
+  const idx = line.indexOf('=');
+  if (idx === -1) continue;
+  const key = line.slice(0, idx).trim();
+  if (key !== 'DATABASE_URL') continue;
+  let value = line.slice(idx + 1).trim();
+  if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) value = value.slice(1, -1);
+  console.log(value);
+  break;
+}
+NODE
+)"
 fi
 
 if [[ -z "${DATABASE_URL:-}" ]]; then
   echo "ERROR: DATABASE_URL is not set. Put it in .env or export it before running backup." >&2
   exit 1
 fi
+export DATABASE_URL
+
+for cmd in pg_dump sha256sum; do
+  if ! command -v "$cmd" >/dev/null 2>&1; then
+    echo "ERROR: required command not found: $cmd" >&2
+    echo "Install PostgreSQL client tools before running backup verification." >&2
+    exit 127
+  fi
+done
 
 mkdir -p "$BACKUP_DIR"
 OUT="$BACKUP_DIR/resiliplan_${TIMESTAMP}.dump"

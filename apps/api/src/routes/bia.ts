@@ -3,8 +3,9 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { requireAuth, requireRole } from '../auth/auth-service.js';
 import { createBiaSchema, deriveBiaFields, patchBiaSchema, summarizeBiaEntries } from '../bia/bia-service.js';
+import { evaluateBiaDrpAlignment } from '../bia/drp-alignment-service.js';
 import { db } from '../db/client.js';
-import { auditLogs, biaEntries } from '../db/schema/index.js';
+import { auditLogs, biaEntries, drpPlans } from '../db/schema/index.js';
 
 const idParam = z.object({ id: z.string().uuid() });
 
@@ -17,6 +18,13 @@ export async function biaRoutes(app: FastifyInstance) {
     const user = await requireAuth(req);
     const entries = await db.select().from(biaEntries).where(eq(biaEntries.tenantId, user.tenantId)).orderBy(asc(biaEntries.serviceName), asc(biaEntries.processName));
     return { entries, summary: summarizeBiaEntries(entries) };
+  });
+
+  app.get('/api/v1/bia/drp-alignment', async (req) => {
+    const user = await requireAuth(req);
+    const entries = await db.select().from(biaEntries).where(eq(biaEntries.tenantId, user.tenantId)).orderBy(asc(biaEntries.serviceName), asc(biaEntries.processName));
+    const plans = await db.select().from(drpPlans).where(eq(drpPlans.tenantId, user.tenantId)).orderBy(asc(drpPlans.serviceName), asc(drpPlans.title));
+    return evaluateBiaDrpAlignment({ biaEntries: entries, drpPlans: plans });
   });
 
   app.post('/api/v1/bia', async (req, reply) => {
