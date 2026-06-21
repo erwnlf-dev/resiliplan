@@ -13,6 +13,7 @@ import {
   RecoveryStrategyRequestSchema,
   AIProviderCreateSchema,
   AIProviderUpdateSchema,
+  AITestConnectionSchema,
 } from '../ai/ai-types.js';
 import { requireAuth, requireRole } from '../auth/auth-service.js';
 import { logger } from '../utils/logger.js';
@@ -58,6 +59,36 @@ export async function aiRoutes(app: FastifyInstance) {
     const { id } = req.params as { id: string };
     await aiProviderService.delete(id);
     return reply.code(204).send();
+  });
+
+  // Test connection without persisting — accepts an inline config
+  app.post('/api/v1/ai/providers/test', async (req, reply) => {
+    const user = await requireAuth(req);
+    requireRole(user, ['admin', 'coordinator']);
+    const parsed = AITestConnectionSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return reply.code(400).send({ error: 'Invalid request', details: parsed.error.flatten() });
+    }
+    try {
+      const model = aiSuggestionService.buildModel(parsed.data);
+      const result = await aiSuggestionService.testConnection(model);
+      return { ok: true, ...result };
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Connection test failed';
+      logger.warn({ err: message, provider: parsed.data.provider }, 'AI connection test failed');
+      return reply.code(200).send({ ok: false, error: message });
+    }
+  });
+
+  // Toggle enabled flag quickly
+  app.post('/api/v1/ai/providers/:id/toggle', async (req, reply) => {
+    const user = await requireAuth(req);
+    requireRole(user, ['admin', 'coordinator']);
+    const { id } = req.params as { id: string };
+    const existing = await aiProviderService.getById(id);
+    if (!existing) return reply.code(404).send({ error: 'Provider not found' });
+    const updated = await aiProviderService.update(id, { enabled: !existing.enabled });
+    return updated;
   });
 
   // ===== AI Suggestions (streaming) =====

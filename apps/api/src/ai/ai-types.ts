@@ -1,12 +1,20 @@
 /**
  * AI Provider Configuration — BYO (Bring Your Own) multi-provider support
- * Supports OpenAI, Anthropic, Google Gemini with per-tenant configuration.
+ * Supports OpenAI, Anthropic, Google Gemini, and OpenAI-compatible (custom baseUrl).
  */
 
 import { z } from 'zod';
 
-export const AIProviderType = z.enum(['openai', 'anthropic', 'google']);
+export const AIProviderType = z.enum(['openai', 'anthropic', 'google', 'openai_compatible']);
 export type AIProviderType = z.infer<typeof AIProviderType>;
+
+// Default models per provider (used as placeholder in UI)
+export const AI_PROVIDER_DEFAULTS: Record<AIProviderType, { model: string; baseUrl?: string; label: string }> = {
+  openai: { model: 'gpt-4o-mini', label: 'OpenAI' },
+  anthropic: { model: 'claude-3-5-sonnet-latest', label: 'Anthropic' },
+  google: { model: 'gemini-1.5-flash', label: 'Google Gemini' },
+  openai_compatible: { model: '', baseUrl: '', label: 'OpenAI-compatible (custom baseUrl)' },
+};
 
 export const AIProviderConfigSchema = z.object({
   id: z.string().uuid(),
@@ -14,6 +22,7 @@ export const AIProviderConfigSchema = z.object({
   provider: AIProviderType,
   apiKey: z.string().min(1, 'API key is required'),
   model: z.string().min(1, 'Model name is required').default('gpt-4o-mini'),
+  baseUrl: z.string().url().optional().or(z.literal('')),
   maxTokens: z.coerce.number().int().positive().default(2048),
   temperature: z.coerce.number().min(0).max(2).default(0.7),
   enabled: z.boolean().default(true),
@@ -23,16 +32,40 @@ export const AIProviderConfigSchema = z.object({
 
 export type AIProviderConfig = z.infer<typeof AIProviderConfigSchema>;
 
-export const AIProviderCreateSchema = AIProviderConfigSchema.omit({
-  id: true,
-  tenantId: true,
-  createdAt: true,
-  updatedAt: true,
+// Base create schema (used for both create and partial updates)
+const AIProviderCreateBaseSchema = z.object({
+  provider: AIProviderType,
+  apiKey: z.string().min(1, 'API key is required'),
+  model: z.string().min(1, 'Model name is required'),
+  baseUrl: z.string().url('Must be a valid URL').optional().or(z.literal('')),
+  maxTokens: z.coerce.number().int().positive().default(2048),
+  temperature: z.coerce.number().min(0).max(2).default(0.7),
+  enabled: z.boolean().default(true),
+});
+
+// Create: requires provider switcher validation
+export const AIProviderCreateSchema = AIProviderCreateBaseSchema.superRefine((data, ctx) => {
+  if (data.provider === 'openai_compatible' && !data.baseUrl) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['baseUrl'],
+      message: 'baseUrl is required for openai_compatible provider',
+    });
+  }
 });
 
 export type AIProviderCreate = z.infer<typeof AIProviderCreateSchema>;
 
-export const AIProviderUpdateSchema = AIProviderCreateSchema.partial();
+// Update: partial; validate baseUrl when switching to openai_compatible
+export const AIProviderUpdateSchema = AIProviderCreateBaseSchema.partial().superRefine((data, ctx) => {
+  if (data.provider === 'openai_compatible' && data.baseUrl === '') {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['baseUrl'],
+      message: 'baseUrl cannot be empty for openai_compatible provider',
+    });
+  }
+});
 export type AIProviderUpdate = z.infer<typeof AIProviderUpdateSchema>;
 
 // Suggestion request/response schemas
@@ -83,3 +116,12 @@ export const RecoveryStrategyRequestSchema = z.object({
 });
 
 export type RecoveryStrategyRequest = z.infer<typeof RecoveryStrategyRequestSchema>;
+
+// Test-connection request
+export const AITestConnectionSchema = z.object({
+  provider: AIProviderType,
+  apiKey: z.string().min(1),
+  model: z.string().min(1),
+  baseUrl: z.string().url().optional().or(z.literal('')),
+});
+export type AITestConnectionRequest = z.infer<typeof AITestConnectionSchema>;

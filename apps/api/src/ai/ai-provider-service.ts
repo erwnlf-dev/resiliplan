@@ -119,6 +119,7 @@ export class AIProviderService {
         provider: data.provider,
         apiKey: encryptedApiKey,
         model: data.model,
+        baseUrl: data.baseUrl && data.baseUrl !== '' ? data.baseUrl : null,
         maxTokens: data.maxTokens,
         temperature: data.temperature,
         enabled: data.enabled,
@@ -150,6 +151,7 @@ export class AIProviderService {
 
     if (data.provider !== undefined) updateData.provider = data.provider;
     if (data.model !== undefined) updateData.model = data.model;
+    if (data.baseUrl !== undefined) updateData.baseUrl = data.baseUrl && data.baseUrl !== '' ? data.baseUrl : null;
     if (data.maxTokens !== undefined) updateData.maxTokens = data.maxTokens;
     if (data.temperature !== undefined) updateData.temperature = data.temperature;
     if (data.enabled !== undefined) updateData.enabled = data.enabled;

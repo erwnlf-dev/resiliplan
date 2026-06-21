@@ -13,16 +13,50 @@ import type {
   BIAAnalysisRequest,
   RiskMitigationRequest,
   RecoveryStrategyRequest,
+  AITestConnectionRequest,
 } from './ai-types.js';
 
 export class AISuggestionService {
   /**
+   * Build a language model from a test-connection or stored provider config.
+   * Exposed publicly so the test-connection endpoint can use it without
+   * touching the database.
+   */
+  buildModel(config: {
+    provider: string;
+    apiKey: string;
+    model: string;
+    baseUrl?: string | null;
+  }) {
+    return this.createModel(config);
+  }
+
+  /**
+   * Cheap liveness check for a configured provider — runs a 1-token completion
+   * and returns timing + the first characters of the response.
+   */
+  async testConnection(model: ReturnType<AISuggestionService['createModel']>) {
+    const start = Date.now();
+    const result = await generateText({
+      model,
+      prompt: 'Reply with the single word: ok',
+      maxOutputTokens: 4,
+      temperature: 0,
+    });
+    return {
+      latencyMs: Date.now() - start,
+      sample: (result.text ?? '').trim().slice(0, 80),
+    };
+  }
+  /**
    * Create a language model instance from provider config.
+   * Supports openai_compatible via custom baseUrl (LiteLLM, Ollama, vLLM, OpenRouter, etc).
    */
   private createModel(provider: {
     provider: string;
     apiKey: string;
     model: string;
+    baseUrl?: string | null;
   }) {
     switch (provider.provider) {
       case 'openai': {
@@ -36,6 +70,20 @@ export class AISuggestionService {
       case 'google': {
         const google = createGoogleGenerativeAI({ apiKey: provider.apiKey });
         return google(provider.model);
+      }
+      case 'openai_compatible': {
+        if (!provider.baseUrl) {
+          throw new Error('openai_compatible provider requires baseUrl');
+        }
+        if (!provider.model) {
+          throw new Error('openai_compatible provider requires model name');
+        }
+        // Reuse the OpenAI SDK with a custom baseUrl — works for any OpenAI-spec endpoint
+        const compatible = createOpenAI({
+          apiKey: provider.apiKey,
+          baseURL: provider.baseUrl,
+        });
+        return compatible(provider.model);
       }
       default:
         throw new Error(`Unsupported AI provider: ${provider.provider}`);

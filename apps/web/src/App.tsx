@@ -143,6 +143,7 @@ function Shell({ user, onUserUpdate, onLogout }: { user: User; onUserUpdate: (us
           <NavLink to="/backups" icon={<Server className="h-4 w-4" />}>Backups</NavLink>
           <NavLink to="/readiness" icon={<CheckCircle2 className="h-4 w-4" />}>Readiness</NavLink>
           <NavLink to="/settings" icon={<Settings className="h-4 w-4" />}>Settings</NavLink>
+          <NavLink to="/ai-providers" icon={<Sparkles className="h-4 w-4" />}>AI Providers</NavLink>
           <NavLink to="/security" icon={<Lock className="h-4 w-4" />}>Security</NavLink>
         </nav></aside>
         <main className="flex-1"><Routes>
@@ -162,6 +163,7 @@ function Shell({ user, onUserUpdate, onLogout }: { user: User; onUserUpdate: (us
           <Route path="/backups" element={<BackupsPage />} />
           <Route path="/readiness" element={<ReadinessPage />} />
           <Route path="/settings" element={<SettingsPage />} />
+          <Route path="/ai-providers" element={<AIProvidersPage />} />
           <Route path="/security" element={<SecurityPage user={user} onUserUpdate={onUserUpdate} />} />
           <Route path="*" element={<NotFound />} />
         </Routes></main>
@@ -511,6 +513,8 @@ function BiaPage() {
   const [summary, setSummary] = useState<BiaSummary | null>(null);
   const [alignment, setAlignment] = useState<BiaDrpAlignment | null>(null);
   const [error, setError] = useState('');
+  const [aiResult, setAiResult] = useState('');
+  const [aiLoading, setAiLoading] = useState(false);
   async function load() {
     try {
       const data = await api<{ entries: BiaEntry[]; summary: BiaSummary }>('/api/v1/bia');
@@ -528,12 +532,23 @@ function BiaPage() {
       form.reset(); await load();
     } catch (err) { setError(err instanceof Error ? err.message : 'Create BIA failed'); }
   }
-  return <RegisterPage title="BIA" subtitle="Business Impact Analysis: impact window, impact dimensions, RTO/RPO, and tier." error={error}><div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5"><KpiCard label="Total BIA" value={`${summary?.totalBia ?? 0}`} hint="Processes" /><KpiCard label="Tier 1" value={`${summary?.tier1 ?? 0}`} hint="Most critical" /><KpiCard label="Tier 2" value={`${summary?.tier2 ?? 0}`} hint="High impact" /><KpiCard label="Fastest RTO" value={summary?.fastestRtoMinutes ? `${summary.fastestRtoMinutes}m` : '-'} hint="Lowest target" /><KpiCard label="Fastest RPO" value={summary?.fastestRpoMinutes ? `${summary.fastestRpoMinutes}m` : '-'} hint="Lowest target" /></div>{alignment && <section className="rounded-lg border bg-card p-4"><div className="flex items-center justify-between"><div><h2 className="font-semibold">BIA ↔ DRP alignment</h2><p className="text-xs text-muted-foreground">Flags missing DRP or RTO/RPO targets weaker than BIA.</p></div><StatusBadge status={`${alignment.summary.missingDrp + alignment.summary.rtoGaps + alignment.summary.rpoGaps} gaps`} /></div><div className="mt-3 grid gap-3 sm:grid-cols-4"><KpiCard label="Aligned" value={`${alignment.summary.aligned}`} hint="BIA rows covered" /><KpiCard label="Missing DRP" value={`${alignment.summary.missingDrp}`} hint="No matching service" /><KpiCard label="RTO gaps" value={`${alignment.summary.rtoGaps}`} hint="DRP slower than BIA" /><KpiCard label="RPO gaps" value={`${alignment.summary.rpoGaps}`} hint="DRP data-loss target weaker" /></div><div className="mt-3 space-y-2">{alignment.items.filter((item) => item.status !== 'aligned').length === 0 ? <p className="text-sm text-muted-foreground">No BIA/DRP target gaps found.</p> : alignment.items.filter((item) => item.status !== 'aligned').slice(0, 8).map((item) => <div key={item.biaId} className="rounded-md border p-3 text-sm"><div className="font-medium">{item.serviceName} · {item.processName}</div><div className="text-xs text-muted-foreground">BIA RTO/RPO {item.biaRtoMinutes}m/{item.biaRpoMinutes}m · DRP {item.drpRtoMinutes ?? '-'}m/{item.drpRpoMinutes ?? '-'}m · {item.status}</div><p className="mt-1 text-xs">{item.detail}</p></div>)}</div></section>}<form onSubmit={submit} className="grid gap-3 rounded-lg border bg-card p-4 md:grid-cols-4"><Input name="serviceName" label="Service" required /><Input name="processName" label="Business process" required /><Input name="owner" label="Owner" required /><Input name="currentRtoMinutes" label="RTO minutes" type="number" defaultValue="240" required /><Input name="currentRpoMinutes" label="RPO minutes" type="number" defaultValue="60" required /><Input name="impact1h" label="Impact 1h (1-5)" type="number" min="1" max="5" defaultValue="3" required /><Input name="impact4h" label="Impact 4h (1-5)" type="number" min="1" max="5" defaultValue="4" required /><Input name="impact24h" label="Impact 24h (1-5)" type="number" min="1" max="5" defaultValue="4" required /><Input name="financialImpact" label="Financial (1-5)" type="number" min="1" max="5" defaultValue="3" required /><Input name="reputationalImpact" label="Reputation (1-5)" type="number" min="1" max="5" defaultValue="3" required /><Input name="regulatoryImpact" label="Regulatory (1-5)" type="number" min="1" max="5" defaultValue="3" required /><label className="text-sm font-medium">Dependency notes<textarea name="dependencyNotes" className="mt-1 h-20 w-full rounded-md border px-3 py-2" /></label><label className="text-sm font-medium md:col-span-4">Workaround<textarea name="workaround" className="mt-1 h-20 w-full rounded-md border px-3 py-2" /></label><div className="md:col-span-4"><button className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-white">Add BIA entry</button></div></form><SimpleTable headers={['Service','Process','Tier','Max','RTO','RPO','Owner']} rows={entries.map((entry) => [entry.serviceName, entry.processName, entry.criticalityTier.replace('_', ' '), String(entry.maxImpactScore), `${entry.currentRtoMinutes}m`, `${entry.currentRpoMinutes}m`, entry.owner])} empty="No BIA entries registered." /></RegisterPage>;
+  async function runAiAnalysis() {
+    if (entries.length === 0) { setError('Add at least one BIA entry before running AI analysis.'); return; }
+    setAiLoading(true); setAiResult(''); setError('');
+    try {
+      const res = await api<{ analysis: string }>('/api/v1/ai/analyze-bia', { method: 'POST', body: JSON.stringify({ biaEntries: entries.map((entry) => ({ id: entry.id, process: entry.processName, impact1h: entry.impact1h, impact4h: entry.impact4h, impact24h: entry.impact24h, financialImpact: entry.financialImpact, reputationImpact: entry.reputationalImpact, regulatoryImpact: entry.regulatoryImpact })) }) });
+      setAiResult(res.analysis);
+    } catch (err) { setError(err instanceof Error ? err.message : 'AI analysis failed'); }
+    finally { setAiLoading(false); }
+  }
+  return <RegisterPage title="BIA" subtitle="Business Impact Analysis: impact window, impact dimensions, RTO/RPO, and tier." error={error}><div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5"><KpiCard label="Total BIA" value={`${summary?.totalBia ?? 0}`} hint="Processes" /><KpiCard label="Tier 1" value={`${summary?.tier1 ?? 0}`} hint="Most critical" /><KpiCard label="Tier 2" value={`${summary?.tier2 ?? 0}`} hint="High impact" /><KpiCard label="Fastest RTO" value={summary?.fastestRtoMinutes ? `${summary.fastestRtoMinutes}m` : '-'} hint="Lowest target" /><KpiCard label="Fastest RPO" value={summary?.fastestRpoMinutes ? `${summary.fastestRpoMinutes}m` : '-'} hint="Lowest target" /></div><section className="rounded-lg border bg-card p-4"><div className="flex items-center justify-between"><div><h2 className="font-semibold flex items-center gap-2"><Sparkles className="h-4 w-4 text-primary" /> AI BIA analysis</h2><p className="text-xs text-muted-foreground">Reviews tier classification, suggests RTO/RPO targets, and ranks recovery sequence.</p></div><button onClick={runAiAnalysis} disabled={aiLoading || entries.length === 0} className="inline-flex items-center gap-1 rounded-md bg-primary px-3 py-2 text-sm font-medium text-white disabled:opacity-50">{aiLoading ? 'Analyzing…' : 'Run analysis'}</button></div>{aiResult && <pre className="mt-3 max-h-96 overflow-auto whitespace-pre-wrap rounded-md bg-muted/40 p-3 text-sm">{aiResult}</pre>}</section>{alignment && <section className="rounded-lg border bg-card p-4"><div className="flex items-center justify-between"><div><h2 className="font-semibold">BIA ↔ DRP alignment</h2><p className="text-xs text-muted-foreground">Flags missing DRP or RTO/RPO targets weaker than BIA.</p></div><StatusBadge status={`${alignment.summary.missingDrp + alignment.summary.rtoGaps + alignment.summary.rpoGaps} gaps`} /></div><div className="mt-3 grid gap-3 sm:grid-cols-4"><KpiCard label="Aligned" value={`${alignment.summary.aligned}`} hint="BIA rows covered" /><KpiCard label="Missing DRP" value={`${alignment.summary.missingDrp}`} hint="No matching service" /><KpiCard label="RTO gaps" value={`${alignment.summary.rtoGaps}`} hint="DRP slower than BIA" /><KpiCard label="RPO gaps" value={`${alignment.summary.rpoGaps}`} hint="DRP data-loss target weaker" /></div><div className="mt-3 space-y-2">{alignment.items.filter((item) => item.status !== 'aligned').length === 0 ? <p className="text-sm text-muted-foreground">No BIA/DRP target gaps found.</p> : alignment.items.filter((item) => item.status !== 'aligned').slice(0, 8).map((item) => <div key={item.biaId} className="rounded-md border p-3 text-sm"><div className="font-medium">{item.serviceName} · {item.processName}</div><div className="text-xs text-muted-foreground">BIA RTO/RPO {item.biaRtoMinutes}m/{item.biaRpoMinutes}m · DRP {item.drpRtoMinutes ?? '-'}m/{item.drpRpoMinutes ?? '-'}m · {item.status}</div><p className="mt-1 text-xs">{item.detail}</p></div>)}</div></section>}<form onSubmit={submit} className="grid gap-3 rounded-lg border bg-card p-4 md:grid-cols-4"><Input name="serviceName" label="Service" required /><Input name="processName" label="Business process" required /><Input name="owner" label="Owner" required /><Input name="currentRtoMinutes" label="RTO minutes" type="number" defaultValue="240" required /><Input name="currentRpoMinutes" label="RPO minutes" type="number" defaultValue="60" required /><Input name="impact1h" label="Impact 1h (1-5)" type="number" min="1" max="5" defaultValue="3" required /><Input name="impact4h" label="Impact 4h (1-5)" type="number" min="1" max="5" defaultValue="4" required /><Input name="impact24h" label="Impact 24h (1-5)" type="number" min="1" max="5" defaultValue="4" required /><Input name="financialImpact" label="Financial (1-5)" type="number" min="1" max="5" defaultValue="3" required /><Input name="reputationalImpact" label="Reputation (1-5)" type="number" min="1" max="5" defaultValue="3" required /><Input name="regulatoryImpact" label="Regulatory (1-5)" type="number" min="1" max="5" defaultValue="3" required /><label className="text-sm font-medium">Dependency notes<textarea name="dependencyNotes" className="mt-1 h-20 w-full rounded-md border px-3 py-2" /></label><label className="text-sm font-medium md:col-span-4">Workaround<textarea name="workaround" className="mt-1 h-20 w-full rounded-md border px-3 py-2" /></label><div className="md:col-span-4"><button className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-white">Add BIA entry</button></div></form><SimpleTable headers={['Service','Process','Tier','Max','RTO','RPO','Owner']} rows={entries.map((entry) => [entry.serviceName, entry.processName, entry.criticalityTier.replace('_', ' '), String(entry.maxImpactScore), `${entry.currentRtoMinutes}m`, `${entry.currentRpoMinutes}m`, entry.owner])} empty="No BIA entries registered." /></RegisterPage>;
 }
 
 function AssetsPage() {
   const [assets, setAssets] = useState<ServiceAsset[]>([]);
   const [error, setError] = useState('');
+  const [aiResult, setAiResult] = useState('');
+  const [aiLoading, setAiLoading] = useState(false);
   async function load() { try { setAssets((await api<{ assets: ServiceAsset[] }>('/api/v1/assets')).assets); } catch (err) { setError(err instanceof Error ? err.message : 'Failed to load assets'); } }
   useEffect(() => { void load(); }, []);
   async function submit(event: React.FormEvent<HTMLFormElement>) {
@@ -545,12 +560,23 @@ function AssetsPage() {
       form.reset(); await load();
     } catch (err) { setError(err instanceof Error ? err.message : 'Create asset failed'); }
   }
-  return <RegisterPage title="Assets" subtitle="Service dependency and recovery-priority register." error={error}><form onSubmit={submit} className="grid gap-3 rounded-lg border bg-card p-4 md:grid-cols-3"><Input name="serviceName" label="Service" required /><Input name="assetName" label="Asset name" required /><Input name="assetType" placeholder="database / vm / network" required label="Asset type" /><Input name="owner" label="Owner" required /><Input name="recoveryPriority" label="Recovery priority" type="number" min="1" max="5" defaultValue="3" required /><label className="text-sm font-medium">Criticality<select name="criticality" defaultValue="high" className="mt-1 w-full rounded-md border px-3 py-2"><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option><option value="critical">Critical</option></select></label><Input name="dependencies" label="Dependencies" placeholder="comma separated" /><label className="text-sm font-medium md:col-span-2">Notes<textarea name="notes" className="mt-1 h-20 w-full rounded-md border px-3 py-2" /></label><div className="md:col-span-3"><button className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-white">Add asset</button></div></form><div className="rounded-lg border bg-card p-4"><h2 className="font-semibold">Dependency map</h2><p className="text-xs text-muted-foreground">Shows declared upstream/downstream dependencies per asset.</p><div className="mt-3 space-y-2">{assets.filter((asset) => asset.dependencies.length > 0).length === 0 ? <p className="text-sm text-muted-foreground">No dependencies declared yet.</p> : assets.filter((asset) => asset.dependencies.length > 0).map((asset) => <div key={asset.id} className="rounded-md border p-3 text-sm"><span className="font-medium">{asset.assetName}</span><span className="mx-2 text-muted-foreground">depends on</span>{asset.dependencies.map((dependency) => <span key={dependency} className="mr-2 rounded-full bg-slate-100 px-2 py-1 text-xs">{dependency}</span>)}</div>)}</div></div><SimpleTable headers={['Service','Asset','Type','Owner','Priority','Criticality']} rows={assets.map((asset) => [asset.serviceName, asset.assetName, asset.assetType, asset.owner, String(asset.recoveryPriority), asset.criticality])} empty="No assets registered." /></RegisterPage>;
+  async function runAiStrategy() {
+    if (assets.length === 0) { setError('Add at least one asset before requesting recovery strategies.'); return; }
+    setAiLoading(true); setAiResult(''); setError('');
+    try {
+      const res = await api<{ strategies: string }>('/api/v1/ai/recovery-strategy', { method: 'POST', body: JSON.stringify({ assets: assets.map((asset) => ({ id: asset.id, name: asset.assetName, type: asset.assetType, criticality: asset.criticality })) }) });
+      setAiResult(res.strategies);
+    } catch (err) { setError(err instanceof Error ? err.message : 'AI strategy suggestion failed'); }
+    finally { setAiLoading(false); }
+  }
+  return <RegisterPage title="Assets" subtitle="Service dependency and recovery-priority register." error={error}><section className="rounded-lg border bg-card p-4"><div className="flex items-center justify-between"><div><h2 className="font-semibold flex items-center gap-2"><Sparkles className="h-4 w-4 text-primary" /> AI recovery strategy</h2><p className="text-xs text-muted-foreground">Suggest hot/warm/cold strategy, infrastructure, and procedure outline per asset.</p></div><button onClick={runAiStrategy} disabled={aiLoading || assets.length === 0} className="inline-flex items-center gap-1 rounded-md bg-primary px-3 py-2 text-sm font-medium text-white disabled:opacity-50">{aiLoading ? 'Drafting…' : 'Suggest strategies'}</button></div>{aiResult && <pre className="mt-3 max-h-96 overflow-auto whitespace-pre-wrap rounded-md bg-muted/40 p-3 text-sm">{aiResult}</pre>}</section><form onSubmit={submit} className="grid gap-3 rounded-lg border bg-card p-4 md:grid-cols-3"><Input name="serviceName" label="Service" required /><Input name="assetName" label="Asset name" required /><Input name="assetType" placeholder="database / vm / network" required label="Asset type" /><Input name="owner" label="Owner" required /><Input name="recoveryPriority" label="Recovery priority" type="number" min="1" max="5" defaultValue="3" required /><label className="text-sm font-medium">Criticality<select name="criticality" defaultValue="high" className="mt-1 w-full rounded-md border px-3 py-2"><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option><option value="critical">Critical</option></select></label><Input name="dependencies" label="Dependencies" placeholder="comma separated" /><label className="text-sm font-medium md:col-span-2">Notes<textarea name="notes" className="mt-1 h-20 w-full rounded-md border px-3 py-2" /></label><div className="md:col-span-3"><button className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-white">Add asset</button></div></form><div className="rounded-lg border bg-card p-4"><h2 className="font-semibold">Dependency map</h2><p className="text-xs text-muted-foreground">Shows declared upstream/downstream dependencies per asset.</p><div className="mt-3 space-y-2">{assets.filter((asset) => asset.dependencies.length > 0).length === 0 ? <p className="text-sm text-muted-foreground">No dependencies declared yet.</p> : assets.filter((asset) => asset.dependencies.length > 0).map((asset) => <div key={asset.id} className="rounded-md border p-3 text-sm"><span className="font-medium">{asset.assetName}</span><span className="mx-2 text-muted-foreground">depends on</span>{asset.dependencies.map((dependency) => <span key={dependency} className="mr-2 rounded-full bg-slate-100 px-2 py-1 text-xs">{dependency}</span>)}</div>)}</div></div><SimpleTable headers={['Service','Asset','Type','Owner','Priority','Criticality']} rows={assets.map((asset) => [asset.serviceName, asset.assetName, asset.assetType, asset.owner, String(asset.recoveryPriority), asset.criticality])} empty="No assets registered." /></RegisterPage>;
 }
 
 function RisksPage() {
   const [risks, setRisks] = useState<ServiceRisk[]>([]);
   const [error, setError] = useState('');
+  const [aiResult, setAiResult] = useState('');
+  const [aiLoading, setAiLoading] = useState(false);
   async function load() { try { setRisks((await api<{ risks: ServiceRisk[] }>('/api/v1/risks')).risks); } catch (err) { setError(err instanceof Error ? err.message : 'Failed to load risks'); } }
   useEffect(() => { void load(); }, []);
   async function submit(event: React.FormEvent<HTMLFormElement>) {
@@ -562,7 +588,16 @@ function RisksPage() {
       form.reset(); await load();
     } catch (err) { setError(err instanceof Error ? err.message : 'Create risk failed'); }
   }
-  return <RegisterPage title="Risks" subtitle="Probability × impact risk register tied to DR readiness." error={error}><form onSubmit={submit} className="grid gap-3 rounded-lg border bg-card p-4 md:grid-cols-3"><Input name="serviceName" label="Service" required /><Input name="riskTitle" label="Risk title" required /><Input name="category" label="Category" required /><Input name="probability" label="Probability 1-5" type="number" min="1" max="5" defaultValue="3" required /><Input name="impact" label="Impact 1-5" type="number" min="1" max="5" defaultValue="4" required /><Input name="owner" label="Owner" /><label className="text-sm font-medium md:col-span-3">Mitigation<textarea name="mitigation" className="mt-1 h-20 w-full rounded-md border px-3 py-2" /></label><div className="md:col-span-3"><button className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-white">Add risk</button></div></form><div className="rounded-lg border bg-card p-4"><h2 className="font-semibold">Risk heatmap</h2><p className="text-xs text-muted-foreground">Grid count by probability and impact.</p><div className="mt-3 grid max-w-xl grid-cols-6 gap-1 text-center text-xs"><div></div>{[1,2,3,4,5].map((impact) => <div key={impact} className="font-medium">I{impact}</div>)}{[5,4,3,2,1].map((probability) => <><div key={`p-${probability}`} className="py-2 font-medium">P{probability}</div>{[1,2,3,4,5].map((impact) => { const count = risks.filter((risk) => risk.probability === probability && risk.impact === impact).length; const score = probability * impact; const color = score >= 15 ? 'bg-red-100 text-red-700' : score >= 8 ? 'bg-yellow-100 text-yellow-800' : 'bg-green-100 text-green-700'; return <div key={`${probability}-${impact}`} className={`rounded p-2 ${color}`}>{count}</div>; })}</>)}</div></div><SimpleTable headers={['Service','Risk','Category','Score','Owner','Status']} rows={risks.map((risk) => [risk.serviceName, risk.riskTitle, risk.category, String(risk.riskScore), risk.owner || '-', risk.status])} empty="No risks registered." /></RegisterPage>;
+  async function runAiMitigation() {
+    if (risks.length === 0) { setError('Add at least one risk before requesting AI mitigations.'); return; }
+    setAiLoading(true); setAiResult(''); setError('');
+    try {
+      const res = await api<{ recommendations: string }>('/api/v1/ai/risk-mitigation', { method: 'POST', body: JSON.stringify({ risks: risks.map((risk) => ({ id: risk.id, description: `${risk.riskTitle} (${risk.category})`, probability: risk.probability, impact: risk.impact, riskScore: risk.riskScore })) }) });
+      setAiResult(res.recommendations);
+    } catch (err) { setError(err instanceof Error ? err.message : 'AI mitigation failed'); }
+    finally { setAiLoading(false); }
+  }
+  return <RegisterPage title="Risks" subtitle="Probability × impact risk register tied to DR readiness." error={error}><section className="rounded-lg border bg-card p-4"><div className="flex items-center justify-between"><div><h2 className="font-semibold flex items-center gap-2"><Sparkles className="h-4 w-4 text-primary" /> AI mitigation recommendations</h2><p className="text-xs text-muted-foreground">Preventive, detective, corrective mitigations and priority per risk.</p></div><button onClick={runAiMitigation} disabled={aiLoading || risks.length === 0} className="inline-flex items-center gap-1 rounded-md bg-primary px-3 py-2 text-sm font-medium text-white disabled:opacity-50">{aiLoading ? 'Drafting…' : 'Recommend mitigations'}</button></div>{aiResult && <pre className="mt-3 max-h-96 overflow-auto whitespace-pre-wrap rounded-md bg-muted/40 p-3 text-sm">{aiResult}</pre>}</section><form onSubmit={submit} className="grid gap-3 rounded-lg border bg-card p-4 md:grid-cols-3"><Input name="serviceName" label="Service" required /><Input name="riskTitle" label="Risk title" required /><Input name="category" label="Category" required /><Input name="probability" label="Probability 1-5" type="number" min="1" max="5" defaultValue="3" required /><Input name="impact" label="Impact 1-5" type="number" min="1" max="5" defaultValue="4" required /><Input name="owner" label="Owner" /><label className="text-sm font-medium md:col-span-3">Mitigation<textarea name="mitigation" className="mt-1 h-20 w-full rounded-md border px-3 py-2" /></label><div className="md:col-span-3"><button className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-white">Add risk</button></div></form><div className="rounded-lg border bg-card p-4"><h2 className="font-semibold">Risk heatmap</h2><p className="text-xs text-muted-foreground">Grid count by probability and impact.</p><div className="mt-3 grid max-w-xl grid-cols-6 gap-1 text-center text-xs"><div></div>{[1,2,3,4,5].map((impact) => <div key={impact} className="font-medium">I{impact}</div>)}{[5,4,3,2,1].map((probability) => <><div key={`p-${probability}`} className="py-2 font-medium">P{probability}</div>{[1,2,3,4,5].map((impact) => { const count = risks.filter((risk) => risk.probability === probability && risk.impact === impact).length; const score = probability * impact; const color = score >= 15 ? 'bg-red-100 text-red-700' : score >= 8 ? 'bg-yellow-100 text-yellow-800' : 'bg-green-100 text-green-700'; return <div key={`${probability}-${impact}`} className={`rounded p-2 ${color}`}>{count}</div>; })}</>)}</div></div><SimpleTable headers={['Service','Risk','Category','Score','Owner','Status']} rows={risks.map((risk) => [risk.serviceName, risk.riskTitle, risk.category, String(risk.riskScore), risk.owner || '-', risk.status])} empty="No risks registered." /></RegisterPage>;
 }
 
 function DrillsPage() {
@@ -730,3 +765,224 @@ function PlaceholderPage({ title, note }: { title: string; note: string }) { ret
 function ErrorBox({ message }: { message: string }) { return <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">{message}</div>; }
 function Centered({ children }: { children: React.ReactNode }) { return <div className="flex min-h-screen items-center justify-center text-sm text-muted-foreground">{children}</div>; }
 function NotFound() { return <div className="space-y-4 text-center"><h1 className="text-4xl font-bold">404</h1><p className="text-muted-foreground">Page not found</p><Link to="/" className="text-primary hover:underline">← Back to Dashboard</Link></div>; }
+
+// ===== AI Providers =====
+
+type AIProviderType = 'openai' | 'anthropic' | 'google' | 'openai_compatible';
+type AIProvider = {
+  id: string;
+  provider: AIProviderType;
+  apiKey: string;
+  model: string;
+  baseUrl?: string | null;
+  maxTokens: number;
+  temperature: number;
+  enabled: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
+const AI_PROVIDER_LABELS: Record<AIProviderType, { label: string; defaultModel: string; defaultBaseUrl?: string; description: string }> = {
+  openai: { label: 'OpenAI', defaultModel: 'gpt-4o-mini', description: 'OpenAI native (api.openai.com).' },
+  anthropic: { label: 'Anthropic', defaultModel: 'claude-3-5-sonnet-latest', description: 'Anthropic native (api.anthropic.com).' },
+  google: { label: 'Google Gemini', defaultModel: 'gemini-1.5-flash', description: 'Google Generative AI (generativelanguage.googleapis.com).' },
+  openai_compatible: { label: 'OpenAI-compatible', defaultModel: '', defaultBaseUrl: 'https://api.openrouter.ai/api/v1', description: 'Custom baseUrl for any OpenAI-spec endpoint (LiteLLM, Ollama, vLLM, OpenRouter, llama.cpp, etc).' },
+};
+
+function AIProvidersPage() {
+  const [providers, setProviders] = useState<AIProvider[]>([]);
+  const [error, setError] = useState('');
+  const [message, setMessage] = useState('');
+  const [formOpen, setFormOpen] = useState(false);
+  const [testing, setTesting] = useState<string | null>(null);
+  const [testResult, setTestResult] = useState<{ id?: string; ok: boolean; latencyMs?: number; sample?: string; error?: string } | null>(null);
+
+  async function load() {
+    try {
+      const data = await api<{ providers: AIProvider[] }>('/api/v1/ai/providers');
+      setProviders(data.providers);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load providers');
+    }
+  }
+  useEffect(() => { void load(); }, []);
+
+  async function submit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError(''); setMessage(''); setTestResult(null);
+    const form = event.currentTarget;
+    const data = new FormData(form);
+    const provider = data.get('provider') as AIProviderType;
+    const baseUrl = String(data.get('baseUrl') ?? '').trim();
+    const payload: Record<string, unknown> = {
+      provider,
+      apiKey: String(data.get('apiKey') ?? ''),
+      model: String(data.get('model') ?? ''),
+      maxTokens: Number(data.get('maxTokens') ?? 2048),
+      temperature: Number(data.get('temperature') ?? 0.7),
+      enabled: true,
+    };
+    if (baseUrl) payload.baseUrl = baseUrl;
+    try {
+      await api<AIProvider>('/api/v1/ai/providers', { method: 'POST', body: JSON.stringify(payload) });
+      form.reset();
+      setFormOpen(false);
+      setMessage('Provider added.');
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to add provider');
+    }
+  }
+
+  async function testInline(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError(''); setTestResult(null);
+    const data = new FormData(event.currentTarget);
+    const provider = data.get('provider') as AIProviderType;
+    const baseUrl = String(data.get('baseUrl') ?? '').trim();
+    const payload: Record<string, unknown> = {
+      provider,
+      apiKey: String(data.get('apiKey') ?? ''),
+      model: String(data.get('model') ?? ''),
+    };
+    if (baseUrl) payload.baseUrl = baseUrl;
+    setTesting('inline');
+    try {
+      const res = await api<{ ok: boolean; latencyMs?: number; sample?: string; error?: string }>(
+        '/api/v1/ai/providers/test',
+        { method: 'POST', body: JSON.stringify(payload) }
+      );
+      setTestResult(res);
+    } catch (err) {
+      setTestResult({ ok: false, error: err instanceof Error ? err.message : 'Test failed' });
+    } finally {
+      setTesting(null);
+    }
+  }
+
+  async function testSaved(provider: AIProvider) {
+    setError(''); setTestResult(null);
+    setTesting(provider.id);
+    try {
+      // Use the inline test endpoint — needs plaintext key, so we can't reuse saved id directly.
+      // Instead, hit suggest with a tiny prompt and time it.
+      const start = Date.now();
+      const csrf = cookieValue('resiliplan_csrf');
+      const res = await fetch(`/api/v1/ai/suggest`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json', ...(csrf ? { 'X-CSRF-Token': decodeURIComponent(csrf) } : {}) },
+        body: JSON.stringify({ section: 'Connectivity check', prompt: 'Reply with the single word: ok' }),
+      });
+      const latencyMs = Date.now() - start;
+      if (!res.ok) {
+        const text = await res.text();
+        setTestResult({ id: provider.id, ok: false, error: text || `HTTP ${res.status}` });
+      } else {
+        const sample = (await res.text()).trim().slice(0, 80);
+        setTestResult({ id: provider.id, ok: true, latencyMs, sample });
+      }
+    } catch (err) {
+      setTestResult({ id: provider.id, ok: false, error: err instanceof Error ? err.message : 'Test failed' });
+    } finally {
+      setTesting(null);
+    }
+  }
+
+  async function toggle(id: string) {
+    try {
+      await api(`/api/v1/ai/providers/${id}/toggle`, { method: 'POST' });
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Toggle failed');
+    }
+  }
+
+  async function remove(id: string) {
+    if (!confirm('Delete this AI provider? Existing plans are not affected.')) return;
+    try {
+      await api(`/api/v1/ai/providers/${id}`, { method: 'DELETE' });
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Delete failed');
+    }
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-start justify-between">
+        <div>
+          <h1 className="text-2xl font-bold">AI Providers</h1>
+          <p className="text-sm text-muted-foreground">BYO multi-provider. Supports OpenAI, Anthropic, Google, and any OpenAI-spec endpoint (LiteLLM, Ollama, vLLM, OpenRouter).</p>
+        </div>
+        <button onClick={() => setFormOpen(!formOpen)} className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-white">
+          {formOpen ? 'Cancel' : 'Add provider'}
+        </button>
+      </div>
+      {error && <ErrorBox message={error} />}
+      {message && <div className="rounded-md border border-green-200 bg-green-50 p-3 text-sm text-green-700">{message}</div>}
+
+      {formOpen && (
+        <form onSubmit={submit} className="grid gap-3 rounded-lg border bg-card p-4 md:grid-cols-2">
+          <label className="text-sm font-medium md:col-span-2">Provider
+            <select name="provider" defaultValue="openai" className="mt-1 w-full rounded-md border px-3 py-2" onChange={(e) => {
+              const meta = AI_PROVIDER_LABELS[e.currentTarget.value as AIProviderType];
+              const modelInput = e.currentTarget.form?.querySelector<HTMLInputElement>('input[name="model"]');
+              const baseInput = e.currentTarget.form?.querySelector<HTMLInputElement>('input[name="baseUrl"]');
+              if (modelInput && !modelInput.value) modelInput.value = meta.defaultModel;
+              if (baseInput) baseInput.value = meta.defaultBaseUrl ?? '';
+            }}>
+              {(Object.keys(AI_PROVIDER_LABELS) as AIProviderType[]).map((key) => (
+                <option key={key} value={key}>{AI_PROVIDER_LABELS[key].label}</option>
+              ))}
+            </select>
+            <span className="mt-1 block text-xs text-muted-foreground">{AI_PROVIDER_LABELS.openai_compatible.description}</span>
+          </label>
+          <Input name="apiKey" label="API key" type="password" required placeholder="sk-..." />
+          <Input name="model" label="Model name" required placeholder="e.g. gpt-4o-mini, claude-3-5-sonnet-latest" />
+          <Input name="baseUrl" label="Base URL (only for OpenAI-compatible)" placeholder="https://api.openrouter.ai/api/v1" />
+          <Input name="maxTokens" label="Max tokens" type="number" defaultValue="2048" />
+          <Input name="temperature" label="Temperature" type="number" step="0.1" defaultValue="0.7" />
+          <div className="md:col-span-2 flex gap-2">
+            <button type="submit" className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-white">Save provider</button>
+            <button type="button" onClick={(e) => testInline({ preventDefault: () => {}, currentTarget: (e.currentTarget as HTMLButtonElement).form! } as unknown as React.FormEvent<HTMLFormElement>)} className="rounded-md border px-4 py-2 text-sm">
+              {testing === 'inline' ? 'Testing…' : 'Test connection'}
+            </button>
+          </div>
+          {testResult && !testResult.id && (
+            <div className={`md:col-span-2 rounded-md border p-3 text-sm ${testResult.ok ? 'border-green-200 bg-green-50 text-green-700' : 'border-red-200 bg-red-50 text-red-700'}`}>
+              {testResult.ok ? `✓ Connection OK in ${testResult.latencyMs}ms — "${testResult.sample}"` : `✗ ${testResult.error}`}
+            </div>
+          )}
+        </form>
+      )}
+
+      <div className="overflow-hidden rounded-lg border bg-card">
+        <div className="grid border-b bg-muted/40 p-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground" style={{ gridTemplateColumns: '1fr 1fr 1fr 1fr 1fr 1.2fr' }}>
+          <div>Provider</div><div>Model</div><div>Base URL</div><div>Tokens</div><div>Status</div><div className="text-right">Actions</div>
+        </div>
+        {providers.length === 0 ? (
+          <div className="p-6 text-center text-sm text-muted-foreground">No AI providers configured. Add one to enable AI helpers across DR Plans, BIA, Risks, and Assets.</div>
+        ) : providers.map((p) => (
+          <div key={p.id} className="grid items-center border-b p-3 text-sm last:border-0" style={{ gridTemplateColumns: '1fr 1fr 1fr 1fr 1fr 1.2fr' }}>
+            <div><div className="font-medium">{AI_PROVIDER_LABELS[p.provider]?.label ?? p.provider}</div><div className="text-xs text-muted-foreground">key: {p.apiKey}</div></div>
+            <div className="truncate pr-3">{p.model}</div>
+            <div className="truncate pr-3 text-xs text-muted-foreground">{p.baseUrl ?? '—'}</div>
+            <div>{p.maxTokens}</div>
+            <div>{p.enabled ? <span className="rounded-full bg-green-100 px-2 py-0.5 text-xs text-green-700">active</span> : <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-700">off</span>}</div>
+            <div className="flex justify-end gap-2">
+              <button onClick={() => testSaved(p)} disabled={testing === p.id} className="rounded-md border px-2 py-1 text-xs disabled:opacity-50">{testing === p.id ? 'Testing…' : 'Test'}</button>
+              <button onClick={() => toggle(p.id)} className="rounded-md border px-2 py-1 text-xs">{p.enabled ? 'Disable' : 'Enable'}</button>
+              <button onClick={() => remove(p.id)} className="rounded-md border border-red-200 px-2 py-1 text-xs text-red-700">Delete</button>
+            </div>
+            {testResult?.id === p.id && (
+              <div className={`col-span-6 mt-2 rounded-md border p-2 text-xs ${testResult.ok ? 'border-green-200 bg-green-50 text-green-700' : 'border-red-200 bg-red-50 text-red-700'}`}>
+                {testResult.ok ? `✓ OK in ${testResult.latencyMs}ms — "${testResult.sample}"` : `✗ ${testResult.error}`}
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
