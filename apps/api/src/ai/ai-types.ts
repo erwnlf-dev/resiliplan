@@ -68,13 +68,19 @@ export const AIProviderUpdateSchema = AIProviderCreateBaseSchema.partial().super
 });
 export type AIProviderUpdate = z.infer<typeof AIProviderUpdateSchema>;
 
-// Suggestion request/response schemas
+// Suggestion request/response schemas — extended with mode for specialized output
+export const AISuggestionMode = z.enum(['draft', 'improve', 'steps', 'test', 'comms', 'escalation']);
+export type AISuggestionMode = z.infer<typeof AISuggestionMode>;
 export const AISuggestionRequestSchema = z.object({
   section: z.string().min(1),
   context: z.string().optional(),
   prompt: z.string().min(1),
+  mode: AISuggestionMode.optional(),
+  serviceName: z.string().optional(),
+  rtoMinutes: z.coerce.number().int().positive().optional(),
+  rpoMinutes: z.coerce.number().int().positive().optional(),
+  criticality: z.string().optional(),
 });
-
 export type AISuggestionRequest = z.infer<typeof AISuggestionRequestSchema>;
 
 export const BIAAnalysisRequestSchema = z.object({
@@ -114,8 +120,75 @@ export const RecoveryStrategyRequestSchema = z.object({
     rpo: z.string().optional(),
   })),
 });
-
 export type RecoveryStrategyRequest = z.infer<typeof RecoveryStrategyRequestSchema>;
+
+// Plan skeleton generation — used when creating a new DRP from scratch
+export const PlanSkeletonRequestSchema = z.object({
+  serviceName: z.string().min(1),
+  serviceOwner: z.string().optional(),
+  rtoMinutes: z.coerce.number().int().positive(),
+  rpoMinutes: z.coerce.number().int().positive(),
+  criticality: z.string().optional(),
+  description: z.string().optional(),
+  assets: z.array(z.object({
+    name: z.string(),
+    type: z.string().optional(),
+    criticality: z.string().optional(),
+  })).optional(),
+  biaEntries: z.array(z.object({
+    process: z.string(),
+    impact1h: z.number().optional(),
+    impact4h: z.number().optional(),
+    impact24h: z.number().optional(),
+    rtoMinutes: z.number().optional(),
+    rpoMinutes: z.number().optional(),
+  })).optional(),
+});
+export type PlanSkeletonRequest = z.infer<typeof PlanSkeletonRequestSchema>;
+
+// Strategy recommendation — reads assets+risks+BIA and recommends a recovery strategy
+export const StrategyRecommendationRequestSchema = z.object({
+  serviceName: z.string().min(1),
+  rtoMinutes: z.coerce.number().int().positive(),
+  rpoMinutes: z.coerce.number().int().positive(),
+  criticality: z.string().optional(),
+  description: z.string().optional(),
+  assets: z.array(z.object({
+    name: z.string(),
+    type: z.string().optional(),
+    criticality: z.string().optional(),
+  })).optional(),
+  biaEntries: z.array(z.object({
+    process: z.string(),
+    rtoMinutes: z.number().optional(),
+    rpoMinutes: z.number().optional(),
+  })).optional(),
+  budgetTier: z.enum(['minimal', 'moderate', 'aggressive']).optional(),
+});
+export type StrategyRecommendationRequest = z.infer<typeof StrategyRecommendationRequestSchema>;
+
+// Recovery steps generator — ordered steps with preconditions, owners, time targets
+export const RecoveryStepsRequestSchema = z.object({
+  serviceName: z.string().min(1),
+  serviceDescription: z.string().optional(),
+  rtoMinutes: z.coerce.number().int().positive(),
+  rpoMinutes: z.coerce.number().int().positive(),
+  strategy: z.string().optional(),
+  stepsCount: z.coerce.number().int().min(3).max(40).default(15),
+  existingSteps: z.string().optional(),
+});
+export type RecoveryStepsRequest = z.infer<typeof RecoveryStepsRequestSchema>;
+
+// Test scenario generator — quarterly test plan
+export const TestScenariosRequestSchema = z.object({
+  serviceName: z.string().min(1),
+  serviceDescription: z.string().optional(),
+  strategy: z.string().optional(),
+  existingTests: z.string().optional(),
+});
+export type TestScenariosRequest = z.infer<typeof TestScenariosRequestSchema>;
+
+// Suggestion request — extended fields are defined earlier in this file (with mode, serviceName, rtoMinutes, etc.)
 
 // Test-connection request
 export const AITestConnectionSchema = z.object({

@@ -14,6 +14,10 @@ import {
   AIProviderCreateSchema,
   AIProviderUpdateSchema,
   AITestConnectionSchema,
+  PlanSkeletonRequestSchema,
+  StrategyRecommendationRequestSchema,
+  RecoveryStepsRequestSchema,
+  TestScenariosRequestSchema,
 } from '../ai/ai-types.js';
 import { requireAuth, requireRole } from '../auth/auth-service.js';
 import { logger } from '../utils/logger.js';
@@ -158,5 +162,81 @@ export async function aiRoutes(app: FastifyInstance) {
 
     const strategies = await aiSuggestionService.suggestRecoveryStrategies(user.tenantId, parsed.data);
     return { strategies };
+  });
+
+  // ===== Plan skeleton (full 14-section draft) =====
+
+  app.post('/api/v1/ai/plan-skeleton', async (req, reply) => {
+    const user = await requireAuth(req);
+    const parsed = PlanSkeletonRequestSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return reply.code(400).send({ error: 'Invalid request', details: parsed.error.flatten() });
+    }
+    try {
+      const skeleton = await aiSuggestionService.generatePlanSkeleton(user.tenantId, parsed.data);
+      return { skeleton };
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Plan skeleton generation failed';
+      logger.warn({ err: message, tenantId: user.tenantId }, 'AI plan skeleton failed');
+      return reply.code(400).send({ error: message });
+    }
+  });
+
+  // ===== Strategy recommendation (structured JSON) =====
+
+  app.post('/api/v1/ai/strategy-recommendation', async (req, reply) => {
+    const user = await requireAuth(req);
+    const parsed = StrategyRecommendationRequestSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return reply.code(400).send({ error: 'Invalid request', details: parsed.error.flatten() });
+    }
+    try {
+      const raw = await aiSuggestionService.recommendStrategy(user.tenantId, parsed.data);
+      // Try to parse JSON; strip code fences if any
+      const cleaned = raw.replace(/^```(?:json)?\s*\n?/i, '').replace(/\n?```\s*$/i, '').trim();
+      let parsed_json: unknown = null;
+      try { parsed_json = JSON.parse(cleaned); } catch { parsed_json = { primaryStrategy: 'unknown', rationale: cleaned }; }
+      return { recommendation: parsed_json, raw };
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Strategy recommendation failed';
+      logger.warn({ err: message, tenantId: user.tenantId }, 'AI strategy recommendation failed');
+      return reply.code(400).send({ error: message });
+    }
+  });
+
+  // ===== Recovery steps generator =====
+
+  app.post('/api/v1/ai/recovery-steps', async (req, reply) => {
+    const user = await requireAuth(req);
+    const parsed = RecoveryStepsRequestSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return reply.code(400).send({ error: 'Invalid request', details: parsed.error.flatten() });
+    }
+    try {
+      const steps = await aiSuggestionService.generateRecoverySteps(user.tenantId, parsed.data);
+      return { steps };
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Recovery steps generation failed';
+      logger.warn({ err: message, tenantId: user.tenantId }, 'AI recovery steps failed');
+      return reply.code(400).send({ error: message });
+    }
+  });
+
+  // ===== Test scenarios generator =====
+
+  app.post('/api/v1/ai/test-scenarios', async (req, reply) => {
+    const user = await requireAuth(req);
+    const parsed = TestScenariosRequestSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return reply.code(400).send({ error: 'Invalid request', details: parsed.error.flatten() });
+    }
+    try {
+      const tests = await aiSuggestionService.generateTestScenarios(user.tenantId, parsed.data);
+      return { tests };
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Test scenarios generation failed';
+      logger.warn({ err: message, tenantId: user.tenantId }, 'AI test scenarios failed');
+      return reply.code(400).send({ error: message });
+    }
   });
 }

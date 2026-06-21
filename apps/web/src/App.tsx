@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, NavLink as RouterNavLink, Route, Routes, useLocation, useNavigate, useParams } from 'react-router-dom';
-import { Activity, AlertTriangle, Bell, Calendar, CheckCircle2, ChevronRight, CreditCard, Download, FileText, Home, Lock, LogOut, Mail, Moon, Save, Send, Server, Settings, Sparkles, Sun, Upload, Users, Wand2 } from 'lucide-react';
+import { Activity, AlertTriangle, Bell, Calendar, CheckCircle2, ChevronRight, Compass, CreditCard, Download, FileText, Home, Lock, LogOut, Mail, Moon, Save, Send, Server, Settings, Sparkles, Sun, Upload, Users, Wand2 } from 'lucide-react';
 import {
   ActivityTimeline,
   Avatar,
@@ -526,6 +526,7 @@ function PlansPage() {
       </div>
     )}
     {formOpen && <NewPlanForm onCreated={(plan) => { setFormOpen(false); toast.success('Plan created', { description: plan.title }); navigate(`/plans/${plan.id}`); }} />}
+    {!formOpen && <AIPlanGenerator onCreated={(plan) => { toast.success('AI draft ready', { description: `${plan.title} — review and refine in editor` }); navigate(`/plans/${plan.id}`); }} />}
     {error && <ErrorBox message={error} />}
     <div className="surface surface-lift">
       <div className="flex items-center justify-between gap-3 border-b p-4">
@@ -599,13 +600,128 @@ function NewPlanForm({ onCreated }: { onCreated: (plan: Plan) => void }) {
     <Input name="title" label="Plan title" placeholder="DRP Core Banking" required />
     <Input name="serviceName" label="Service name" placeholder="Core Banking" required />
     <Input name="serviceOwner" label="Service owner" placeholder="Nama PIC" required />
-    <label className="text-sm font-medium">Criticality<select name="criticality" defaultValue="high" className="input mt-1"><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option><option value="critical">Critical</option></select></label>
-    <Input name="rtoMinutes" label="RTO minutes" type="number" defaultValue="240" required />
-    <Input name="rpoMinutes" label="RPO minutes" type="number" defaultValue="60" required />
-    <Input name="recoveryStrategy" label="Recovery strategy" placeholder="Warm standby / backup restore" />
-    <label className="text-sm font-medium md:col-span-2">Description<textarea name="description" className="input mt-1 h-20" /></label>
-    <div className="md:col-span-2"><Button type="submit" variant="primary" size="md" disabled={submitting} leftIcon={<FileText className="h-4 w-4" />}>{submitting ? 'Creating…' : 'Create from ISO 22301 template'}</Button></div>
+    <label className="text-sm font-medium">Criticality<select name="criticality" defaultValue="tier_2" className="input mt-1"><option value="tier_1">Tier 1 — critical</option><option value="tier_2">Tier 2 — high</option><option value="tier_3">Tier 3 — standard</option><option value="tier_4">Tier 4 — deferrable</option></select></label>
+    <Input name="rtoMinutes" label="RTO minutes" type="number" defaultValue="60" required />
+    <Input name="rpoMinutes" label="RPO minutes" type="number" defaultValue="15" required />
+    <label className="text-sm font-medium md:col-span-2">Description<textarea name="description" className="input mt-1 h-20" placeholder="What does this service do, who depends on it?" /></label>
+    <label className="text-sm font-medium md:col-span-2">Recovery strategy<textarea name="recoveryStrategy" className="input mt-1 h-20" placeholder="Warm-standby in secondary region with read-replica promotion..." /></label>
+    <div className="md:col-span-2"><Button type="submit" variant="primary" size="md" disabled={submitting}>{submitting ? 'Creating…' : 'Create empty plan'}</Button></div>
   </form>;
+}
+
+function AIPlanGenerator({ onCreated }: { onCreated: (plan: Plan) => void }) {
+  const [open, setOpen] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [progress, setProgress] = useState('');
+  const [error, setError] = useState('');
+  const toast = useToast();
+  async function generate(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault(); setError(''); setSubmitting(true);
+    const data = new FormData(event.currentTarget);
+    const payload = {
+      serviceName: String(data.get('serviceName')),
+      serviceOwner: String(data.get('serviceOwner') || 'TBA'),
+      rtoMinutes: Number(data.get('rtoMinutes')),
+      rpoMinutes: Number(data.get('rpoMinutes')),
+      criticality: String(data.get('criticality')),
+      description: String(data.get('description') || ''),
+    };
+    try {
+      setProgress('Creating empty plan…');
+      const plan = await api<Plan>('/api/v1/plans', { method: 'POST', body: JSON.stringify({
+        title: `DRP ${payload.serviceName}`, serviceName: payload.serviceName, serviceOwner: payload.serviceOwner,
+        criticality: payload.criticality, rtoMinutes: payload.rtoMinutes, rpoMinutes: payload.rpoMinutes,
+        description: payload.description, recoveryStrategy: '',
+      }) });
+      setProgress('Asking AI to draft all 14 ISO 22301 sections…');
+      const res = await fetch('/api/v1/ai/plan-skeleton', {
+        method: 'POST', credentials: 'include',
+        headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': decodeURIComponent(cookieValue('resiliplan_csrf') || '') },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) {
+        const txt = await res.text();
+        throw new Error(txt || 'AI plan skeleton failed');
+      }
+      const { skeleton } = await res.json() as { skeleton: string };
+      setProgress('Parsing AI sections…');
+      // Parse sections: === SECTION: <key> === ... <next section or end>
+      const sectionRegex = /===\s*SECTION:\s*([a-z0-9_-]+)\s*===\s*([\s\S]*?)(?=\n===\s*SECTION:|$)/gi;
+      const parsed: Record<string, string> = {};
+      let match;
+      while ((match = sectionRegex.exec(skeleton)) !== null) {
+        const key = match[1].toLowerCase().trim();
+        const content = match[2].trim();
+        if (content) parsed[key] = content;
+      }
+      const keys = Object.keys(parsed);
+      if (keys.length === 0) throw new Error('AI returned no parseable sections. Try again or create empty plan and use per-section AI.');
+      setProgress(`Saving ${keys.length} sections to plan…`);
+      // Load plan sections to get IDs
+      const planDetail = await api<Plan>(`/api/v1/plans/${plan.id}`);
+      const sections = planDetail.sections ?? [];
+      let saved = 0;
+      for (const sec of sections) {
+        const content = parsed[sec.sectionKey];
+        if (!content) continue;
+        await api(`/api/v1/plans/${plan.id}/sections/${sec.sectionKey}`, { method: 'PATCH', body: JSON.stringify({ contentMarkdown: content }) });
+        saved++;
+      }
+      toast.success('AI draft complete', { description: `${saved}/${sections.length} sections populated. Review and refine.` });
+      setOpen(false);
+      onCreated(plan);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'AI generation failed');
+      toast.error('AI generation failed', { description: err instanceof Error ? err.message : 'Unknown error' });
+    } finally {
+      setSubmitting(false);
+      setProgress('');
+    }
+  }
+  return (
+    <>
+      <div className="surface surface-lift border-primary/30 bg-gradient-to-br from-primary/5 via-accent/5 to-transparent p-5">
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <h3 className="text-base font-semibold flex items-center gap-2">
+              <Wand2 className="h-5 w-5 text-primary" /> Generate a plan with AI
+            </h3>
+            <p className="mt-1 text-sm text-muted-foreground">
+              AI drafts all 14 ISO 22301 sections (context, roles, recovery, testing, etc.) tailored to your service, RTO, and RPO.
+              You review and refine after.
+            </p>
+          </div>
+          <Button variant="primary" size="md" onClick={() => setOpen(true)} leftIcon={<Sparkles className="h-4 w-4" />}>Open AI generator</Button>
+        </div>
+      </div>
+      <Modal open={open} onClose={() => !submitting && setOpen(false)} title="AI plan generator" description="Tell AI the basics — service, owner, recovery targets. AI drafts all 14 ISO 22301 sections." size="md">
+        <form onSubmit={generate} className="space-y-3">
+          {error && <ErrorBox message={error} />}
+          {submitting && progress && (
+            <div className="rounded-lg border border-primary/30 bg-primary/5 p-3 text-sm text-primary">
+              <div className="flex items-center gap-2">
+                <Sparkles className="h-4 w-4 anim-pulse-soft" />
+                <span>{progress}</span>
+              </div>
+            </div>
+          )}
+          <div className="grid gap-3 md:grid-cols-2">
+            <Input name="serviceName" label="Service name" placeholder="Core Banking" required />
+            <Input name="serviceOwner" label="Service owner" placeholder="Nama PIC" />
+            <label className="text-sm font-medium">Criticality<select name="criticality" defaultValue="tier_2" className="input mt-1"><option value="tier_1">Tier 1 — critical</option><option value="tier_2">Tier 2 — high</option><option value="tier_3">Tier 3 — standard</option><option value="tier_4">Tier 4 — deferrable</option></select></label>
+            <div />
+            <Input name="rtoMinutes" label="RTO minutes" type="number" defaultValue="60" required />
+            <Input name="rpoMinutes" label="RPO minutes" type="number" defaultValue="15" required />
+          </div>
+          <label className="block text-sm font-medium">Description<textarea name="description" className="input mt-1 h-24" placeholder="What does this service do, who depends on it, any infrastructure patterns (cloud, on-prem, hybrid)?" /></label>
+          <div className="flex justify-end gap-2">
+            <Button type="button" variant="ghost" size="md" onClick={() => setOpen(false)} disabled={submitting}>Cancel</Button>
+            <Button type="submit" variant="primary" size="md" disabled={submitting} leftIcon={<Sparkles className="h-4 w-4" />}>{submitting ? 'Generating…' : 'Generate plan'}</Button>
+          </div>
+        </form>
+      </Modal>
+    </>
+  );
 }
 
 function PlanEditor() {
@@ -621,6 +737,10 @@ function PlanEditor() {
   const [replyTo, setReplyTo] = useState<string | null>(null);
   const [aiSuggestion, setAiSuggestion] = useState('');
   const [aiLoading, setAiLoading] = useState(false);
+  const [strategyOpen, setStrategyOpen] = useState(false);
+  const [strategyLoading, setStrategyLoading] = useState(false);
+  const [strategyResult, setStrategyResult] = useState<{ recommendation: Record<string, unknown>; raw: string } | null>(null);
+  const [strategyError, setStrategyError] = useState('');
   const [approveOpen, setApproveOpen] = useState(false);
   const [signatureText, setSignatureText] = useState('');
   const [rollbackTarget, setRollbackTarget] = useState<PlanVersion | null>(null);
@@ -793,6 +913,42 @@ function PlanEditor() {
     updateDraft(aiSuggestion);
     toast.info('AI suggestion applied', { description: 'Click Save to persist to server.' });
   }
+  async function fetchStrategy() {
+    if (!plan || !id) return;
+    setStrategyOpen(true); setStrategyLoading(true); setStrategyError(''); setStrategyResult(null);
+    try {
+      const csrf = cookieValue('resiliplan_csrf');
+      const res = await fetch('/api/v1/ai/strategy-recommendation', {
+        method: 'POST', credentials: 'include',
+        headers: { 'Content-Type': 'application/json', ...(csrf ? { 'X-CSRF-Token': decodeURIComponent(csrf) } : {}) },
+        body: JSON.stringify({
+          serviceName: plan.serviceName,
+          description: (plan as { description?: string }).description ?? undefined,
+          rtoMinutes: plan.rtoMinutes,
+          rpoMinutes: plan.rpoMinutes,
+          criticality: plan.criticality,
+        }),
+      });
+      if (!res.ok) { const t = await res.text(); throw new Error(t || 'Strategy request failed'); }
+      const data = await res.json() as { recommendation: Record<string, unknown>; raw: string };
+      setStrategyResult(data);
+    } catch (err) {
+      setStrategyError(err instanceof Error ? err.message : 'Strategy recommendation failed');
+    } finally { setStrategyLoading(false); }
+  }
+  async function applyStrategy() {
+    if (!plan || !id || !strategyResult) return;
+    const rec = strategyResult.recommendation;
+    const summary = `${rec.primaryStrategy ?? 'unknown'}${rec.secondaryStrategy ? ` (+ ${rec.secondaryStrategy})` : ''}\n\n${rec.rationale ?? ''}\n\nRTO/RPO fit: ${rec.rtoRpoFit ?? 'n/a'}\n\nInfrastructure needed:\n${(rec.infrastructureNeeded as string[] | undefined)?.map((s) => `- ${s}`).join('\n') ?? '-'}\n\nTradeoffs:\n${(rec.tradeoffs as string[] | undefined)?.map((s) => `- ${s}`).join('\n') ?? '-'}\n\nPrerequisites:\n${(rec.prerequisites as string[] | undefined)?.map((s) => `- ${s}`).join('\n') ?? '-'}`;
+    try {
+      await api(`/api/v1/plans/${id}`, { method: 'PATCH', body: JSON.stringify({ recoveryStrategy: summary }) });
+      setPlan((p) => p ? { ...p, recoveryStrategy: summary } : p);
+      toast.success('Strategy applied to plan', { description: 'Open the Strategy section to refine wording.' });
+      setSelected('strategy');
+    } catch (err) {
+      toast.error('Failed to apply strategy', { description: err instanceof Error ? err.message : 'Unknown error' });
+    }
+  }
 
   if (error) return <ErrorBox message={error} />;
   if (!plan) return (
@@ -817,6 +973,7 @@ function PlanEditor() {
       actions={
         <>
           <StatusBadge status={plan.status} />
+          <Button variant="ghost" size="sm" onClick={fetchStrategy} leftIcon={<Compass className="h-3.5 w-3.5" />}>Strategy advisor</Button>
           <Button variant="ghost" size="sm" onClick={submitReview} leftIcon={<Send className="h-3.5 w-3.5" />}>Submit</Button>
           <Button variant="primary" size="sm" onClick={() => setApproveOpen(true)} leftIcon={<CheckCircle2 className="h-3.5 w-3.5" />}>Approve</Button>
         </>
@@ -1015,6 +1172,86 @@ function PlanEditor() {
           <div className="text-xs text-muted-foreground">{new Date(rollbackTarget.createdAt).toLocaleString()}</div>
         </div>
       )}
+    </Modal>
+
+    {/* Strategy advisor modal */}
+    <Modal
+      open={strategyOpen}
+      onClose={() => setStrategyOpen(false)}
+      title="AI recovery strategy advisor"
+      description="Reads your service, RTO, RPO, criticality. Recommends primary + secondary strategy with rationale, infrastructure, and tradeoffs."
+      size="lg"
+      footer={
+        <>
+          <Button variant="ghost" size="md" onClick={() => setStrategyOpen(false)}>Close</Button>
+          <Button variant="primary" size="md" onClick={applyStrategy} disabled={!strategyResult} leftIcon={<Sparkles className="h-3.5 w-3.5" />}>Apply to plan</Button>
+        </>
+      }
+    >
+      {strategyLoading && (
+        <div className="flex items-center gap-2 rounded-lg border border-primary/30 bg-primary/5 p-3 text-sm text-primary">
+          <Sparkles className="h-4 w-4 anim-pulse-soft" />
+          <span>Asking AI architect to recommend a strategy…</span>
+        </div>
+      )}
+      {strategyError && <ErrorBox message={strategyError} />}
+      {strategyResult && (() => {
+        const rec = strategyResult.recommendation;
+        const list = (k: string) => ((rec[k] as unknown[] | undefined) ?? []).map((s) => String(s));
+        return (
+          <div className="space-y-3">
+            <div className="grid gap-2 sm:grid-cols-2">
+              <div className="rounded-lg border bg-card/40 p-3">
+                <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Primary strategy</div>
+                <div className="mt-1 text-base font-bold text-primary">{String(rec.primaryStrategy ?? 'unknown')}</div>
+              </div>
+              <div className="rounded-lg border bg-card/40 p-3">
+                <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Secondary / fallback</div>
+                <div className="mt-1 text-base font-bold text-muted-foreground">{String(rec.secondaryStrategy ?? '—')}</div>
+              </div>
+              <div className="rounded-lg border bg-card/40 p-3">
+                <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Estimated cost</div>
+                <div className="mt-1 text-sm font-semibold">{String(rec.estimatedCostTier ?? '—')} · {String(rec.monthlyCostRangeUSD ?? '—')}</div>
+              </div>
+              <div className="rounded-lg border bg-card/40 p-3">
+                <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Achievable RTO / RPO</div>
+                <div className="mt-1 text-sm font-semibold">{String(rec.estimatedRtoMinutes ?? '?')}m / {String(rec.estimatedRpoMinutes ?? '?')}m</div>
+              </div>
+            </div>
+            {Boolean(rec.rationale) ? (
+              <div className="rounded-lg border bg-card/40 p-3">
+                <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Rationale</h4>
+                <p className="mt-1 text-sm leading-relaxed">{String(rec.rationale ?? '')}</p>
+                {Boolean(rec.rtoRpoFit) ? <p className="mt-2 text-xs text-muted-foreground">RTO/RPO fit: {String(rec.rtoRpoFit)}</p> : null}
+              </div>
+            ) : null}
+            {list('infrastructureNeeded').length > 0 && (
+              <div className="rounded-lg border bg-card/40 p-3">
+                <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Infrastructure needed</h4>
+                <ul className="mt-1 ml-4 list-disc space-y-0.5 text-sm">
+                  {list('infrastructureNeeded').map((s, i) => <li key={i}>{s}</li>)}
+                </ul>
+              </div>
+            )}
+            {list('prerequisites').length > 0 && (
+              <div className="rounded-lg border bg-card/40 p-3">
+                <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Prerequisites</h4>
+                <ul className="mt-1 ml-4 list-disc space-y-0.5 text-sm">
+                  {list('prerequisites').map((s, i) => <li key={i}>{s}</li>)}
+                </ul>
+              </div>
+            )}
+            {list('tradeoffs').length > 0 && (
+              <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3">
+                <h4 className="text-xs font-semibold uppercase tracking-wider text-amber-700 dark:text-amber-400">Tradeoffs</h4>
+                <ul className="mt-1 ml-4 list-disc space-y-0.5 text-sm">
+                  {list('tradeoffs').map((s, i) => <li key={i}>{s}</li>)}
+                </ul>
+              </div>
+            )}
+          </div>
+        );
+      })()}
     </Modal>
   </div>;
 }
