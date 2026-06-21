@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, NavLink as RouterNavLink, Route, Routes, useLocation, useNavigate, useParams } from 'react-router-dom';
-import { Activity, AlertTriangle, Bell, Calendar, CheckCircle2, CreditCard, Download, FileText, Home, Lock, LogOut, Mail, Moon, Save, Send, Server, Settings, Sparkles, Sun, Users } from 'lucide-react';
+import { Activity, AlertTriangle, Bell, Calendar, CheckCircle2, ChevronRight, CreditCard, Download, FileText, Home, Lock, LogOut, Mail, Moon, Save, Send, Server, Settings, Sparkles, Sun, Upload, Users, Wand2 } from 'lucide-react';
 import {
   ActivityTimeline,
   Avatar,
@@ -22,6 +22,7 @@ import {
   useToast,
 } from './components/ui';
 import { CommandPalette, CommandTrigger } from './components/CommandPalette';
+import { MarkdownEditor, SnippetItem, CompletionSignal } from './components/MarkdownEditor';
 import * as Y from 'yjs';
 import { WebsocketProvider } from 'y-websocket';
 
@@ -464,6 +465,28 @@ function PlansPage() {
     const q = search.toLowerCase();
     return plans.filter((p) => p.title.toLowerCase().includes(q) || p.serviceName.toLowerCase().includes(q));
   }, [plans, search]);
+  const health = useMemo(() => {
+    const now = Date.now();
+    const ninetyDays = 90 * 24 * 60 * 60 * 1000;
+    const stale = plans.filter((p) => {
+      const updated = (p as { updatedAt?: string }).updatedAt;
+      if (!updated) return true;
+      return now - new Date(updated).getTime() > ninetyDays;
+    });
+    const lowContent = plans.filter((p) => {
+      const sections = (p as { sections?: Section[] }).sections ?? [];
+      const totalWords = sections.reduce((s, sec) => s + (sec.contentMarkdown || '').trim().split(/\s+/).filter(Boolean).length, 0);
+      return sections.length > 0 && totalWords < 200;
+    });
+    const needsApproval = plans.filter((p) => p.status === 'in_review');
+    const expiredReview = plans.filter((p) => p.status === 'approved' && (() => {
+      const updated = (p as { updatedAt?: string }).updatedAt;
+      if (!updated) return false;
+      return now - new Date(updated).getTime() > ninetyDays;
+    })());
+    return { stale, lowContent, needsApproval, expiredReview };
+  }, [plans]);
+  const healthScore = plans.length === 0 ? 0 : Math.round(((plans.length - health.stale.length - health.lowContent.length - health.expiredReview.length) / plans.length) * 100);
 
   return <div className="space-y-6">
     <PageHeader
@@ -479,6 +502,29 @@ function PlansPage() {
       <KpiCard label="In Review" value={`${stats.review}`} hint="Waiting approval" tone="warning" />
       <KpiCard label="Draft" value={`${stats.draft}`} hint="Work in progress" tone="info" />
     </div>
+    {plans.length > 0 && (
+      <div className="surface surface-lift p-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="text-sm font-semibold flex items-center gap-2"><Activity className="h-4 w-4 text-primary" /> Maintenance health</h3>
+            <p className="text-xs text-muted-foreground">Surfaces plans that need attention: stale, low-content, awaiting approval, or post-90d re-review.</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="h-1.5 w-32 overflow-hidden rounded-full bg-muted/60">
+              <div className={`h-full rounded-full transition-all duration-500 ${healthScore >= 80 ? 'bg-emerald-500' : healthScore >= 50 ? 'bg-amber-500' : 'bg-destructive'}`} style={{ width: `${Math.max(healthScore, 2)}%` }} />
+            </div>
+            <span className="text-sm font-bold tabular-nums">{healthScore}%</span>
+            <span className="text-xs text-muted-foreground">healthy</span>
+          </div>
+        </div>
+        <div className="mt-3 grid gap-2 sm:grid-cols-4">
+          <HealthFlag label="Stale (>90d)" count={health.stale.length} tone={health.stale.length > 0 ? 'warning' : 'success'} hint="not updated in 90+ days" />
+          <HealthFlag label="Low content" count={health.lowContent.length} tone={health.lowContent.length > 0 ? 'warning' : 'success'} hint="<200 words total" />
+          <HealthFlag label="Awaiting approval" count={health.needsApproval.length} tone={health.needsApproval.length > 0 ? 'info' : 'success'} hint="submitted, not signed" />
+          <HealthFlag label="Re-review due" count={health.expiredReview.length} tone={health.expiredReview.length > 0 ? 'warning' : 'success'} hint="approved >90d ago" />
+        </div>
+      </div>
+    )}
     {formOpen && <NewPlanForm onCreated={(plan) => { setFormOpen(false); toast.success('Plan created', { description: plan.title }); navigate(`/plans/${plan.id}`); }} />}
     {error && <ErrorBox message={error} />}
     <div className="surface surface-lift">
@@ -495,9 +541,41 @@ function PlansPage() {
         />
       ) : filtered.length === 0 ? (
         <EmptyState icon={<FileText className="h-6 w-6" />} title="No plans match your search" description={`No plans matching "${search}". Try a different keyword.`} />
-      ) : <div className="divide-y">{filtered.map((plan) => <Link key={plan.id} to={`/plans/${plan.id}`} className="flex items-center justify-between p-4 transition-colors hover:bg-muted/50"><div className="min-w-0 flex-1"><div className="font-medium">{plan.title}</div><div className="text-sm text-muted-foreground">{plan.serviceName} · RTO {plan.rtoMinutes}m · RPO {plan.rpoMinutes}m</div></div><StatusBadge status={plan.status} /></Link>)}</div>}
+      ) : <div className="divide-y">{filtered.map((plan) => {
+        const updated = (plan as { updatedAt?: string }).updatedAt;
+        const isStale = updated ? (Date.now() - new Date(updated).getTime() > 90 * 24 * 60 * 60 * 1000) : true;
+        const sections = (plan as { sections?: Section[] }).sections ?? [];
+        const totalWords = sections.reduce((s, sec) => s + (sec.contentMarkdown || '').trim().split(/\s+/).filter(Boolean).length, 0);
+        const isLow = sections.length > 0 && totalWords < 200;
+        return (
+          <Link key={plan.id} to={`/plans/${plan.id}`} className="flex items-center justify-between gap-3 p-4 transition-colors hover:bg-muted/50">
+            <div className="min-w-0 flex-1">
+              <div className="font-medium">{plan.title}</div>
+              <div className="text-sm text-muted-foreground">{plan.serviceName} · RTO {plan.rtoMinutes}m · RPO {plan.rpoMinutes}m · {totalWords} words</div>
+            </div>
+            <div className="flex items-center gap-1.5">
+              {isStale && <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-medium text-amber-700 dark:text-amber-400" title="Not updated in 90+ days">stale</span>}
+              {isLow && <span className="rounded-full bg-rose-500/15 px-2 py-0.5 text-[10px] font-medium text-rose-700 dark:text-rose-400" title="<200 words total">thin</span>}
+              <StatusBadge status={plan.status} />
+            </div>
+          </Link>
+        );
+      })}</div>}
     </div>
   </div>;
+}
+
+function HealthFlag({ label, count, tone, hint }: { label: string; count: number; tone: 'success' | 'warning' | 'info'; hint: string }) {
+  const toneClass = tone === 'success' ? 'border-emerald-500/30 bg-emerald-500/5 text-emerald-700 dark:text-emerald-400' : tone === 'warning' ? 'border-amber-500/30 bg-amber-500/5 text-amber-700 dark:text-amber-400' : 'border-blue-500/30 bg-blue-500/5 text-blue-700 dark:text-blue-400';
+  return (
+    <div className={`rounded-lg border p-2.5 ${toneClass}`}>
+      <div className="flex items-baseline justify-between">
+        <span className="text-[10px] font-semibold uppercase tracking-wider">{label}</span>
+        <span className="text-lg font-bold tabular-nums">{count}</span>
+      </div>
+      <p className="mt-0.5 text-[10px] opacity-80">{hint}</p>
+    </div>
+  );
 }
 
 function NewPlanForm({ onCreated }: { onCreated: (plan: Plan) => void }) {
@@ -746,9 +824,12 @@ function PlanEditor() {
     />
 
     {plan.sections && plan.sections.length > 0 && (
-      <div className="overflow-x-auto">
-        <Tabs items={sectionTabs} value={selected} onChange={setSelected} />
-      </div>
+      <>
+        <div className="overflow-x-auto">
+          <Tabs items={sectionTabs} value={selected} onChange={setSelected} />
+        </div>
+        <SectionStatusGrid sections={plan.sections} selected={selected} onSelect={setSelected} />
+      </>
     )}
 
     <div className="surface surface-lift">
@@ -764,7 +845,18 @@ function PlanEditor() {
           <Button variant="primary" size="sm" onClick={saveSection} leftIcon={<Save className="h-3.5 w-3.5" />}>Save</Button>
         </div>
       </div>
-      <textarea value={draft} onChange={(e) => updateDraft(e.target.value)} className="h-[480px] w-full resize-none p-4 font-mono text-sm outline-none bg-transparent" />
+      <MarkdownEditor
+        value={draft}
+        onChange={updateDraft}
+        onSave={saveSection}
+        autoSaveDelayMs={30000}
+        minHeight={480}
+        onAiAssist={suggestWithAI}
+        aiLoading={aiLoading}
+        snippets={SECTION_SNIPPETS}
+        completionSignals={getCompletionSignals(section)}
+        ariaLabel={`${section?.title} markdown editor`}
+      />
     </div>
 
     {aiSuggestion && <div className="surface-glow p-5">
@@ -997,6 +1089,11 @@ function BiaPage() {
   const [error, setError] = useState('');
   const [aiResult, setAiResult] = useState('');
   const [aiLoading, setAiLoading] = useState(false);
+  const [templatesOpen, setTemplatesOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
+  const [importPreview, setImportPreview] = useState<string[][]>([]);
+  const [importError, setImportError] = useState('');
+  const [importing, setImporting] = useState(false);
   const toast = useToast();
   async function load() {
     setLoading(true);
@@ -1028,15 +1125,105 @@ function BiaPage() {
     } catch (err) { setError(err instanceof Error ? err.message : 'AI analysis failed'); toast.error('AI analysis failed', { description: err instanceof Error ? err.message : 'Unknown error' }); }
     finally { setAiLoading(false); }
   }
+  async function addFromTemplate(template: typeof BIA_PROCESS_TEMPLATES[number]) {
+    try {
+      await api<BiaEntry>('/api/v1/bia', { method: 'POST', body: JSON.stringify({
+        serviceName: template.serviceName, processName: template.name, owner: 'TBA',
+        impact1h: template.impactOperational, impact4h: Math.max(template.impactOperational - 1, 1), impact24h: Math.max(template.impactOperational - 2, 1),
+        financialImpact: template.impactFinancial, reputationalImpact: template.impactReputation, regulatoryImpact: template.impactRegulatory,
+        currentRtoMinutes: template.rtoMinutes, currentRpoMinutes: template.rpoMinutes,
+        dependencyNotes: '', workaround: template.workaround,
+      }) });
+      await load();
+      toast.success('BIA entry added from template', { description: template.name });
+    } catch (err) {
+      toast.error('Failed to add template', { description: err instanceof Error ? err.message : 'Unknown error' });
+    }
+  }
+  function handleCsvFile(file: File) {
+    setImportError(''); setImportPreview([]);
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const text = String(reader.result || '');
+        const rows = parseCsv(text);
+        if (rows.length < 2) { setImportError('CSV must have a header row and at least one data row.'); return; }
+        const header = rows[0].map((h) => h.trim().toLowerCase().replace(/\s+/g, ''));
+        const required = ['processname', 'service', 'rto', 'rpo'];
+        const missing = required.filter((r) => !header.includes(r));
+        if (missing.length) { setImportError(`Missing required columns: ${missing.join(', ')}`); return; }
+        setImportPreview(rows);
+      } catch (err) { setImportError(err instanceof Error ? err.message : 'Failed to parse CSV'); }
+    };
+    reader.onerror = () => setImportError('Failed to read file');
+    reader.readAsText(file);
+  }
+  async function commitImport() {
+    if (importPreview.length < 2) return;
+    setImporting(true); setError('');
+    let successCount = 0; let failCount = 0;
+    const header = importPreview[0].map((h) => h.trim().toLowerCase().replace(/\s+/g, ''));
+    const col = (name: string) => header.indexOf(name);
+    for (let i = 1; i < importPreview.length; i++) {
+      const row = importPreview[i];
+      const payload: Record<string, unknown> = {
+        processName: row[col('processname')] || '',
+        serviceName: row[col('service')] || 'unassigned',
+        owner: row[col('owner')] || 'TBA',
+        impact1h: Number(row[col('impact1h')] || 3),
+        impact4h: Number(row[col('impact4h')] || 4),
+        impact24h: Number(row[col('impact24h')] || 5),
+        financialImpact: Number(row[col('financial')] || 3),
+        reputationalImpact: Number(row[col('reputation')] || 3),
+        regulatoryImpact: Number(row[col('regulatory')] || 3),
+        currentRtoMinutes: Number(row[col('rto')] || 240),
+        currentRpoMinutes: Number(row[col('rpo')] || 60),
+        dependencyNotes: row[col('dependencies')] || '',
+        workaround: row[col('workaround')] || '',
+      };
+      try {
+        await api<BiaEntry>('/api/v1/bia', { method: 'POST', body: JSON.stringify(payload) });
+        successCount++;
+      } catch { failCount++; }
+    }
+    setImporting(false);
+    setImportOpen(false);
+    setImportPreview([]);
+    await load();
+    if (successCount > 0) toast.success(`Imported ${successCount} BIA entries`, { description: failCount > 0 ? `${failCount} failed (see logs)` : 'all rows saved' });
+    else toast.error('Import failed', { description: 'No rows could be saved' });
+  }
+  const expectedProcesses = 15; // heuristic: at least 15 for healthy BIA
+  const biaPercent = Math.min(100, Math.round((entries.length / expectedProcesses) * 100));
   return <div className="space-y-6">
     <PageHeader
       eyebrow={<>Resilience · BIA</>}
       title="Business Impact Analysis"
       description="Map processes to RTO/RPO targets, tier classification, and impact windows. Auto-aligned to DR plans."
       breadcrumbs={[{ label: 'BIA' }]}
+      actions={
+        <>
+          <Button variant="ghost" size="md" onClick={() => setImportOpen(true)} leftIcon={<Upload className="h-3.5 w-3.5" />}>Import CSV</Button>
+          <Button variant="primary" size="md" onClick={() => setTemplatesOpen(true)} leftIcon={<Wand2 className="h-3.5 w-3.5" />}>Add from template</Button>
+        </>
+      }
     />
     {error && <ErrorBox message={error} />}
     {loading ? <SkeletonList rows={5} /> : <>
+      <div className="surface surface-lift p-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="text-sm font-semibold">BIA coverage</h3>
+            <p className="text-xs text-muted-foreground">{entries.length} processes mapped · target {expectedProcesses}+ for healthy coverage</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="h-1.5 w-40 overflow-hidden rounded-full bg-muted/60">
+              <div className={`h-full rounded-full transition-all duration-500 ${biaPercent >= 80 ? 'bg-emerald-500' : biaPercent >= 40 ? 'bg-amber-500' : 'bg-destructive'}`} style={{ width: `${biaPercent}%` }} />
+            </div>
+            <span className="text-sm font-bold tabular-nums">{biaPercent}%</span>
+          </div>
+        </div>
+      </div>
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
         <KpiCard label="Total BIA" value={`${summary?.totalBia ?? 0}`} hint="Processes" tone="primary" />
         <KpiCard label="Tier 1" value={`${summary?.tier1 ?? 0}`} hint="Most critical" tone="warning" />
@@ -1080,7 +1267,12 @@ function BiaPage() {
         <div className="md:col-span-3"><Button type="submit" variant="primary" size="md">Add BIA entry</Button></div>
       </form>
       {entries.length === 0 ? (
-        <EmptyState icon={<FileText className="h-8 w-8" />} title="No BIA entries yet" description="Map critical business processes with impact windows and RTO/RPO targets." />
+        <EmptyState
+          icon={<FileText className="h-8 w-8" />}
+          title="No BIA entries yet"
+          description="Map critical business processes with impact windows and RTO/RPO targets. Start with a template or import a CSV."
+          action={<div className="flex gap-2"><Button variant="ghost" onClick={() => setImportOpen(true)}>Import CSV</Button><Button variant="primary" onClick={() => setTemplatesOpen(true)}>Add from template</Button></div>}
+        />
       ) : (
         <div className="surface surface-lift">
           <div className="border-b p-4 font-semibold">BIA register</div>
@@ -1098,6 +1290,80 @@ function BiaPage() {
         </div>
       )}
     </>}
+
+    <Modal open={templatesOpen} onClose={() => setTemplatesOpen(false)} title="BIA process templates" description="Pick a common service to pre-fill RTO/RPO/tier/impact values. You can adjust after." size="lg">
+      <div className="grid gap-2 sm:grid-cols-2">
+        {BIA_PROCESS_TEMPLATES.map((t) => (
+          <button
+            key={t.serviceName}
+            type="button"
+            onClick={() => { void addFromTemplate(t); }}
+            className="rounded-lg border bg-card p-3 text-left transition-all hover:border-primary/40 hover:bg-muted/40"
+          >
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0 flex-1">
+                <div className="text-sm font-semibold">{t.name}</div>
+                <p className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">{t.description}</p>
+              </div>
+              <StatusBadge status={t.tier === 'tier_1' ? 'in_review' : t.tier === 'tier_2' ? 'draft' : 'approved'} label={t.tier} />
+            </div>
+            <div className="mt-2 flex items-center gap-3 text-[10px] text-muted-foreground">
+              <span>RTO {t.rtoMinutes}m</span>
+              <span>RPO {t.rpoMinutes}m</span>
+              <span>Op {t.impactOperational}/5</span>
+              <span>Fin {t.impactFinancial}/5</span>
+            </div>
+          </button>
+        ))}
+      </div>
+      <div className="mt-4 flex justify-end">
+        <Button variant="ghost" size="md" onClick={() => setTemplatesOpen(false)}>Done</Button>
+      </div>
+    </Modal>
+
+    <Modal open={importOpen} onClose={() => { setImportOpen(false); setImportPreview([]); setImportError(''); }} title="Import BIA from CSV" description="Header must include: process name, service, RTO, RPO. Optional: owner, impact 1h/4h/24h, financial, reputation, regulatory, dependencies, workaround." size="lg">
+      <div className="space-y-3">
+        <div className="rounded-lg border-2 border-dashed border-border/60 bg-card/40 p-6 text-center">
+          <Upload className="mx-auto h-6 w-6 text-muted-foreground" />
+          <p className="mt-2 text-sm">Drop or select a CSV file</p>
+          <p className="text-xs text-muted-foreground">UTF-8 · first row is header</p>
+          <input
+            type="file"
+            accept=".csv,text/csv"
+            className="mt-3 block w-full text-xs file:mr-3 file:rounded-md file:border-0 file:bg-primary file:px-3 file:py-1.5 file:text-xs file:text-primary-foreground hover:file:bg-primary/90"
+            onChange={(e) => {
+              const file = e.currentTarget.files?.[0];
+              if (file) handleCsvFile(file);
+            }}
+          />
+          <a href={`data:text/csv;charset=utf-8,${encodeURIComponent('process name,service,owner,RTO,RPO,impact 1h,impact 4h,impact 24h,financial,reputation,regulatory,dependencies,workaround\nPrimary OLTP database,db-primary,Data team,60,5,5,5,5,5,5,4,redis+object storage,read replica promotion')}`} download="bia-template.csv" className="mt-2 inline-block text-xs text-primary underline">Download template</a>
+        </div>
+        {importError && <ErrorBox message={importError} />}
+        {importPreview.length > 1 && (
+          <div className="rounded-lg border bg-card/40 p-3">
+            <div className="mb-2 flex items-center justify-between">
+              <h4 className="text-sm font-semibold">Preview ({importPreview.length - 1} rows)</h4>
+              <Button variant="primary" size="sm" onClick={() => void commitImport()} disabled={importing}>{importing ? 'Importing…' : `Import ${importPreview.length - 1} entries`}</Button>
+            </div>
+            <div className="max-h-60 overflow-auto">
+              <table className="w-full text-xs">
+                <thead className="bg-muted/40 text-[10px] uppercase text-muted-foreground">
+                  <tr>{importPreview[0].map((h, i) => <th key={i} className="p-2 text-left">{h}</th>)}</tr>
+                </thead>
+                <tbody>
+                  {importPreview.slice(1, 11).map((row, i) => (
+                    <tr key={i} className="border-t">
+                      {row.map((c, j) => <td key={j} className="p-2 align-top">{c}</td>)}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {importPreview.length - 1 > 10 && <p className="mt-2 text-xs text-muted-foreground">… and {importPreview.length - 11} more rows</p>}
+            </div>
+          </div>
+        )}
+      </div>
+    </Modal>
   </div>;
 }
 
@@ -1954,6 +2220,248 @@ function KpiCard({ label, value, hint, tone = 'primary', spark }: { label: strin
 }
 function StatusBadge({ status, label }: { status: string; label?: string }) { const color = status === 'approved' ? 'bg-green-100 text-green-700' : status === 'in_review' ? 'bg-yellow-100 text-yellow-800' : 'bg-slate-100 text-slate-700'; return <span className={`rounded-full px-2 py-1 text-xs font-medium ${color}`}>{label ?? status.replace('_', ' ')}</span>; }
 function Input(props: React.InputHTMLAttributes<HTMLInputElement> & { label: string }) { const { label, ...rest } = props; return <label className="text-sm font-medium">{label}<input {...rest} className="mt-1 w-full rounded-md border px-3 py-2" /></label>; }
+function getCompletionSignals(section: Section | undefined): CompletionSignal[] {
+  if (!section) return [];
+  return [
+    { key: 'minWords', label: 'At least 50 words', weight: 15, hint: 'Add more context — typical sections are 200+ words.', passed: (c) => c.trim().split(/\s+/).filter(Boolean).length >= 50 },
+    { key: 'hasHeading', label: 'Has a heading', weight: 10, hint: 'Start with # or ## to introduce the section.', passed: (c) => /^#{1,3}\s/m.test(c) },
+    { key: 'hasList', label: 'Has a bulleted or numbered list', weight: 15, hint: 'Use lists to enumerate steps, contacts, or criteria.', passed: (c) => /(^|\n)(-|\d+\.)\s/m.test(c) },
+    { key: 'hasTable', label: 'Has a table', weight: 10, hint: 'Tables work well for RTOs, contacts, dependencies.', passed: (c) => /\|.+\|[\s\S]*\|[-:|\s]+\|/m.test(c) },
+    { key: 'hasContacts', label: 'Mentions contact info', weight: 15, hint: 'Roles, names, phone/email or @handles.', passed: (c) => /(\+?\d[\d\s-]{6,}|@[\w.-]+|ext\.?\s*\d|phone|tel|email|on[- ]?call|escalat)/i.test(c) },
+    { key: 'hasRtoRpo', label: 'References RTO/RPO or times', weight: 10, hint: 'Section should mention target times if relevant.', passed: (c) => /(RTO|RPO|recovery time|recovery point|\d+\s*(min|minute|hour|h\b))/i.test(c) },
+    { key: 'hasRoles', label: 'Defines roles and responsibilities', weight: 15, hint: 'Owner, on-call, approver, coordinator.', passed: (c) => /(owner|coordinator|approver|on[- ]?call|responsible|accountable|RACI)/i.test(c) },
+    { key: 'hasEvidence', label: 'References evidence or verification', weight: 10, hint: 'Mention where to verify (runbook, dashboard, test).', passed: (c) => /(evidence|verify|test|dashboard|runbook|log|audit)/i.test(c) },
+  ];
+}
+
+const SECTION_SNIPPETS: SnippetItem[] = [
+  { id: 'roles', label: 'Roles & responsibilities', category: 'Governance',
+    description: 'RACI-style table for plan ownership, approval, and on-call.',
+    content: `## Roles & responsibilities
+
+| Role | Person | Responsibility | Contact |
+|------|--------|----------------|---------|
+| Plan owner | TBA | Owns plan accuracy, quarterly review | <email> |
+| Incident commander | TBA | Coordinates during disaster | <phone> |
+| On-call engineer | rotation | First responder, 24/7 | PagerDuty |
+| Approver (executive) | TBA | Final approval of plan and DR funding | <email> |
+` },
+  { id: 'contact-tree', label: 'Contact tree (escalation)', category: 'Governance',
+    description: 'Tiered escalation tree with notification order and method.',
+    content: `## Communication & escalation tree
+
+1. **Tier 1 — On-call engineer** (response: 5 min)
+   - Page via PagerDuty
+   - Slack #dr-warroom
+2. **Tier 2 — Incident commander + service owner** (response: 15 min)
+   - Phone call, then group SMS
+3. **Tier 3 — Director of Operations** (response: 30 min)
+   - Direct call
+4. **Tier 4 — Executive sponsor** (response: 60 min)
+   - Direct call + email summary
+` },
+  { id: 'rto-rpo', label: 'RTO / RPO table', category: 'Objectives',
+    description: 'Recovery time and point objectives per tier.',
+    content: `## Recovery objectives
+
+| Tier | RTO (max downtime) | RPO (max data loss) | Workaround window |
+|------|-------------------|--------------------|--------------------|
+| Tier 1 (critical) | 1 hour | 5 minutes | 15 min workaround |
+| Tier 2 (important) | 4 hours | 1 hour | 2 h workaround |
+| Tier 3 (standard) | 24 hours | 24 hours | Best effort |
+| Tier 4 (deferrable) | 72 hours | 72 hours | Manual only |
+` },
+  { id: 'incident-response', label: 'Incident response (initial)', category: 'Operations',
+    description: 'Step-by-step initial response from alert to declaration.',
+    content: `## Initial incident response
+
+1. **Detect** — alert from monitoring, user report, or status page trigger.
+2. **Triage** (target 5 min) — on-call engineer acknowledges, classifies severity, opens incident channel.
+3. **Contain** (target 15 min) — apply runbook mitigation: failover, scale up, block traffic, rollback deploy.
+4. **Assess** (target 30 min) — is this a disaster (DR plan activation) or operational incident?
+5. **Declare disaster** (per criteria below) — incident commander calls executive sponsor, switches to DR plan.
+6. **Communicate** — status page update every 30 min until resolved.
+
+### Declaration criteria
+- Outage > 30 min with no ETA
+- Data loss confirmed or imminent
+- Multi-region failure
+- Security breach with operational impact
+` },
+  { id: 'recovery-procedure', label: 'Recovery procedure (detailed)', category: 'Operations',
+    description: 'Ordered technical recovery steps with verification gates.',
+    content: `## Recovery procedure
+
+### Pre-flight
+- [ ] Confirm DR runbook accessible
+- [ ] Verify backup integrity (latest checksum OK)
+- [ ] Check DR region capacity and quota
+- [ ] Notify on-call coordinator
+
+### Recovery steps
+1. **Provision DR environment** (target: 20 min)
+   - Trigger IaC pipeline
+   - Verify network connectivity
+   - Confirm DNS failover readiness
+2. **Restore data** (target: 40 min)
+   - Restore latest backup to DR DB
+   - Apply WAL/binlog tail to meet RPO
+   - Verify data integrity with checksum
+3. **Cut over** (target: 60 min)
+   - Update DNS / load balancer to DR
+   - Monitor error rates and latency
+   - Stand down primary region traffic
+4. **Verify** (target: 75 min)
+   - Run smoke test suite
+   - Confirm customer-facing flows
+   - Validate metric and log ingestion
+
+### Rollback
+If verification fails, revert DNS to primary (now recovered) and open post-incident review.
+` },
+  { id: 'testing-schedule', label: 'Testing schedule', category: 'Validation',
+    description: 'Quarterly test cadence with type, scope, and success criteria.',
+    content: `## Testing schedule
+
+| Quarter | Test type | Scope | Success criteria |
+|---------|-----------|-------|------------------|
+| Q1 | Tabletop walkthrough | Plan, contact tree | All roles confirm; gaps documented |
+| Q2 | Component recovery | Restore from backup | Backup mounts, data readable |
+| Q3 | Partial DR failover | Single tier service | RTO met, no data loss |
+| Q4 | Full DR drill | Cross-region cutover | All RTOs/RPOs met, comms tested |
+` },
+  { id: 'communication-plan', label: 'Communication plan', category: 'Communications',
+    description: 'Audience, channel, frequency, and owner for status updates.',
+    content: `## Communication plan
+
+| Audience | Channel | Cadence | Owner |
+|----------|---------|---------|-------|
+| Internal eng | Slack #dr-warroom | Real-time | Incident commander |
+| Internal exec | Email + call | Hourly | Comms lead |
+| Customers | Status page | Every 30 min | Comms lead |
+| Regulators (if required) | Email + formal letter | Within 24 h | Legal |
+| Vendors / partners | Direct call | As needed | Service owner |
+` },
+  { id: 'succession', label: 'Succession & delegation', category: 'Governance',
+    description: 'Backup approvers and delegated decision rights.',
+    content: `## Succession & delegation
+
+If primary role-holder is unreachable:
+
+- **Plan owner** → deputy plan owner → director of operations
+- **Incident commander** → senior on-call → engineering manager
+- **Approver** → deputy approver (always pre-authorized up to $50k spend for emergency failover)
+- **Comms lead** → marketing on-call → CEO chief of staff
+
+All delegation pairs reviewed quarterly. Pre-authorized spend reviewed annually.
+` },
+];
+
+function SectionStatusGrid({ sections, selected, onSelect }: { sections: Section[]; selected: string; onSelect: (key: string) => void }) {
+  const items = sections.map((s) => {
+    const wordCount = (s.contentMarkdown || '').trim().split(/\s+/).filter(Boolean).length;
+    const signals = getCompletionSignals(s);
+    const total = signals.reduce((sum, c) => sum + c.weight, 0) || 1;
+    const earned = signals.filter((c) => c.passed(s.contentMarkdown || '')).reduce((sum, c) => sum + c.weight, 0);
+    return { ...s, wordCount, percent: Math.round((earned / total) * 100) };
+  });
+  const overall = Math.round(items.reduce((s, i) => s + i.percent, 0) / items.length);
+  return (
+    <div className="surface surface-lift p-4">
+      <div className="mb-3 flex items-center justify-between">
+        <div>
+          <h3 className="text-sm font-semibold">Plan completion overview</h3>
+          <p className="text-xs text-muted-foreground">Click any section to jump. Hover for completion details.</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="h-1.5 w-32 overflow-hidden rounded-full bg-muted/60">
+            <div className={`h-full rounded-full transition-all duration-500 ${overall >= 80 ? 'bg-emerald-500' : overall >= 40 ? 'bg-amber-500' : 'bg-destructive'}`} style={{ width: `${overall}%` }} />
+          </div>
+          <span className="text-sm font-bold tabular-nums">{overall}%</span>
+          <span className="text-xs text-muted-foreground">overall</span>
+        </div>
+      </div>
+      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+        {items.map((item) => {
+          const active = item.sectionKey === selected;
+          const tone = item.percent >= 80 ? 'emerald' : item.percent >= 40 ? 'amber' : 'rose';
+          return (
+            <button
+              key={item.sectionKey}
+              type="button"
+              onClick={() => onSelect(item.sectionKey)}
+              className={`group relative rounded-lg border p-3 text-left transition-all ${active ? 'border-primary bg-primary/5 shadow-sm' : 'border-border/60 hover:border-primary/40 hover:bg-muted/30'}`}
+            >
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-xs font-mono text-muted-foreground">{item.order}.</span>
+                    <span className="truncate text-xs font-semibold">{item.title.replace(/^\d+\.\s*/, '')}</span>
+                  </div>
+                  <p className="mt-0.5 text-[10px] text-muted-foreground">{item.isoClause}</p>
+                </div>
+                {active && <ChevronRight className="h-3.5 w-3.5 text-primary" />}
+              </div>
+              <div className="mt-2 flex items-center gap-2">
+                <div className="h-1 flex-1 overflow-hidden rounded-full bg-muted/60">
+                  <div
+                    className={`h-full rounded-full ${tone === 'emerald' ? 'bg-emerald-500' : tone === 'amber' ? 'bg-amber-500' : 'bg-rose-500'}`}
+                    style={{ width: `${item.percent}%` }}
+                  />
+                </div>
+                <span className="text-[10px] font-bold tabular-nums text-foreground">{item.percent}%</span>
+              </div>
+              <div className="mt-1 flex items-center justify-between text-[10px] text-muted-foreground">
+                <span>{item.wordCount} words</span>
+                <StatusBadge status={item.status} label={item.status} />
+              </div>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+const BIA_PROCESS_TEMPLATES: { name: string; serviceName: string; description: string; rtoMinutes: number; rpoMinutes: number; tier: 'tier_1' | 'tier_2' | 'tier_3' | 'tier_4'; impactFinancial: number; impactOperational: number; impactReputation: number; impactRegulatory: number; workaround: string }[] = [
+  { name: 'Email & messaging (SMTP / Exchange)', serviceName: 'email', description: 'Outbound and inbound email for staff and customers.', rtoMinutes: 60, rpoMinutes: 30, tier: 'tier_2', impactFinancial: 2, impactOperational: 4, impactReputation: 2, impactRegulatory: 1, workaround: 'Personal Gmail accounts for critical comms, status page updates.' },
+  { name: 'Authentication (SSO / LDAP / OIDC)', serviceName: 'auth', description: 'Single sign-on for all internal and customer-facing apps.', rtoMinutes: 30, rpoMinutes: 5, tier: 'tier_1', impactFinancial: 3, impactOperational: 5, impactReputation: 3, impactRegulatory: 2, workaround: 'Local accounts pre-created for top 20 staff; VPN-only access for emergencies.' },
+  { name: 'DNS (authoritative + recursive)', serviceName: 'dns', description: 'External and internal DNS resolution.', rtoMinutes: 15, rpoMinutes: 60, tier: 'tier_1', impactFinancial: 4, impactOperational: 5, impactReputation: 4, impactRegulatory: 1, workaround: 'Secondary DNS provider, lower TTL (300s) on critical records.' },
+  { name: 'Public web / marketing site', serviceName: 'web-public', description: 'Corporate website, marketing pages, status page.', rtoMinutes: 240, rpoMinutes: 1440, tier: 'tier_3', impactFinancial: 2, impactOperational: 2, impactReputation: 4, impactRegulatory: 1, workaround: 'Static cache served from CDN; status page via separate provider.' },
+  { name: 'API gateway', serviceName: 'api-gateway', description: 'Public-facing API entry point for all customer integrations.', rtoMinutes: 60, rpoMinutes: 5, tier: 'tier_1', impactFinancial: 5, impactOperational: 5, impactReputation: 5, impactRegulatory: 2, workaround: 'Read-only mode for partners; status page with ETA; manual export queue.' },
+  { name: 'Primary OLTP database', serviceName: 'db-primary', description: 'PostgreSQL/MySQL main transactional store.', rtoMinutes: 60, rpoMinutes: 5, tier: 'tier_1', impactFinancial: 5, impactOperational: 5, impactReputation: 5, impactRegulatory: 4, workaround: 'Read replica promotion; manual data entry into temporary queue.' },
+  { name: 'Data warehouse / analytics', serviceName: 'analytics', description: 'Internal reporting and analytics pipeline.', rtoMinutes: 1440, rpoMinutes: 1440, tier: 'tier_3', impactFinancial: 2, impactOperational: 2, impactReputation: 1, impactRegulatory: 2, workaround: 'Stale reports acknowledged; data refresh deferred.' },
+  { name: 'Object/file storage', serviceName: 'storage', description: 'S3-compatible object storage for documents, media, backups.', rtoMinutes: 240, rpoMinutes: 60, tier: 'tier_2', impactFinancial: 3, impactOperational: 3, impactReputation: 2, impactRegulatory: 3, workaround: 'Read-only access via secondary region; customer-uploaded files deferred.' },
+  { name: 'CI/CD build pipeline', serviceName: 'cicd', description: 'Source control, build, test, deployment pipeline.', rtoMinutes: 480, rpoMinutes: 60, tier: 'tier_3', impactFinancial: 2, impactOperational: 3, impactReputation: 1, impactRegulatory: 1, workaround: 'Manual deploys from main branch with peer review.' },
+  { name: 'Monitoring & observability (metrics, logs, traces)', serviceName: 'monitoring', description: 'Centralized observability stack for production services.', rtoMinutes: 240, rpoMinutes: 240, tier: 'tier_2', impactFinancial: 2, impactOperational: 4, impactReputation: 2, impactRegulatory: 1, workaround: 'Cloud provider default monitoring + manual health checks.' },
+  { name: 'VPN / private network', serviceName: 'network-vpn', description: 'Site-to-site and remote-access VPN for office and staff.', rtoMinutes: 120, rpoMinutes: 60, tier: 'tier_1', impactFinancial: 3, impactOperational: 4, impactReputation: 2, impactRegulatory: 2, workaround: 'Zero-trust cloud app access; mobile tethering.' },
+  { name: 'Customer support ticketing', serviceName: 'support', description: 'Helpdesk / ticketing system for customer issues.', rtoMinutes: 480, rpoMinutes: 240, tier: 'tier_2', impactFinancial: 2, impactOperational: 3, impactReputation: 4, impactRegulatory: 1, workaround: 'Shared inbox + shared spreadsheet triage; status page update.' },
+  { name: 'Billing & payment processing', serviceName: 'billing', description: 'Subscription billing, invoicing, payment gateway.', rtoMinutes: 240, rpoMinutes: 15, tier: 'tier_1', impactFinancial: 5, impactOperational: 3, impactReputation: 4, impactRegulatory: 4, workaround: 'Manual invoicing queue; payment retry after recovery.' },
+  { name: 'Backup & restore service', serviceName: 'backup', description: 'Centralized backup, snapshot, and restore orchestration.', rtoMinutes: 720, rpoMinutes: 1440, tier: 'tier_2', impactFinancial: 4, impactOperational: 4, impactReputation: 2, impactRegulatory: 4, workaround: 'Manual snapshot using cloud provider native tools.' },
+  { name: 'DHCP / internal network services', serviceName: 'network-internal', description: 'DHCP, NTP, internal DNS, jump host, bastion.', rtoMinutes: 240, rpoMinutes: 1440, tier: 'tier_3', impactFinancial: 2, impactOperational: 3, impactReputation: 1, impactRegulatory: 1, workaround: 'Static IPs documented; cloud jump host for admin access.' },
+];
+
+function parseCsv(text: string): string[][] {
+  const rows: string[][] = [];
+  let row: string[] = [];
+  let cell = '';
+  let inQuotes = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (inQuotes) {
+      if (c === '"' && text[i + 1] === '"') { cell += '"'; i++; }
+      else if (c === '"') { inQuotes = false; }
+      else { cell += c; }
+    } else {
+      if (c === '"') inQuotes = true;
+      else if (c === ',') { row.push(cell); cell = ''; }
+      else if (c === '\n' || c === '\r') { if (c === '\r' && text[i + 1] === '\n') i++; row.push(cell); rows.push(row); row = []; cell = ''; }
+      else { cell += c; }
+    }
+  }
+  if (cell.length || row.length) { row.push(cell); rows.push(row); }
+  return rows.filter((r) => r.some((c) => c.trim().length > 0));
+}
 function PlaceholderPage({ title, note }: { title: string; note: string }) { return <div className="space-y-4"><h1 className="text-2xl font-bold">{title}</h1><div className="rounded-lg border border-dashed border-border bg-card/50 p-12 text-center"><p className="text-sm text-muted-foreground">{note}</p></div></div>; }
 function ErrorBox({ message }: { message: string }) { return <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">{message}</div>; }
 function Centered({ children }: { children: React.ReactNode }) { return <div className="flex min-h-screen items-center justify-center text-sm text-muted-foreground">{children}</div>; }
