@@ -321,25 +321,28 @@ Respond in structured markdown with clear headings per asset.`;
     const systemPrompt = `You are an expert ISO 22301 Business Continuity consultant writing a complete Disaster Recovery Plan skeleton.
 You produce a single response that drafts all 14 standard sections, separated by clear markers so the system can parse each section into the plan editor.
 
-The 14 sections to draft (in this order):
-1. context — scope, purpose, audience
-2. roles — RACI for plan owner, incident commander, on-call, approver
-3. objectives — RTO/RPO, success criteria
-4. risk — top risks, mitigations, residual risk
-5. strategy — high-level recovery strategy rationale
-6. communication — comms plan, audiences, cadence
-7. activation — criteria and authority to declare disaster
-8. recovery — detailed step-by-step recovery procedure
-9. restoration — return-to-normal procedure
-10. dependencies — upstream/downstream systems, vendors
-11. testing — quarterly test schedule
-12. training — who is trained, frequency
-13. maintenance — review cycle, ownership
-14. appendix — references, glossary, change log
+CRITICAL: You MUST use the EXACT section keys listed below, in this order. Do not paraphrase, translate, or substitute. The system parses these keys verbatim.
 
-Format strictly: each section starts with a line '=== SECTION: <key> ===' then the markdown content, then a blank line, then the next section.
+The 14 sections (use these EXACT keys, in this order):
+1. context     — Service scope, purpose, audience, in/out of scope, regulatory mapping
+2. leadership  — Plan owner, DR coordinator, incident commander, approver, RACI matrix
+3. planning    — Recovery objectives, RTO/RPO targets, success criteria, measurement
+4. support     — Resources, tools, budget, vendor contracts, communication channels
+5. operation   — Day-to-day operational controls and monitoring before any DR event
+6. bia         — Business Impact Analysis summary, impact timelines (1h/4h/24h), tier classification
+7. risk        — Top threats, likelihood/impact, mitigations, residual risk
+8. strategy    — High-level recovery strategy rationale (hot-standby / warm-standby / pilot-light / backup-restore)
+9. procedure   — Detailed step-by-step recovery runbook: activation → failover → verification → stand-down
+10. communication — Stakeholder map, escalation tree, customer/internal comms cadence
+11. validation  — Acceptance criteria, health checks, data integrity checks, pass/fail gates
+12. exercise    — Quarterly test schedule (Q1 tabletop, Q2 partial, Q3 full, Q4 surprise), scope, success criteria
+13. performance — KPIs (RTO achieved vs target, RPO achieved vs target), review cadence
+14. improvement — Lessons learned process, corrective action workflow, version update rule
+
+Format strictly: each section starts with a line '=== SECTION: <key> ===' (key from the list above) then the markdown content, then a blank line, then the next section.
 Keep each section 80-180 words. Be specific to the service provided.
-Use tables, bullet lists, and ISO clause references where appropriate.`;
+Use tables, bullet lists, and ISO 22301 clause references where appropriate.
+You MUST produce exactly 14 sections. Do not skip any. Do not combine sections. Do not add extra sections.`;
 
     const userPrompt = `Service name: ${request.serviceName}
 ${request.serviceOwner ? `Service owner: ${request.serviceOwner}` : ''}
@@ -354,7 +357,7 @@ ${assetList}
 Known BIA processes:
 ${biaList}
 
-Draft all 14 sections now. Use the exact format with === SECTION: <key> === markers.`;
+Draft all 14 sections now, using the EXACT section keys (context, leadership, planning, support, operation, bia, risk, strategy, procedure, communication, validation, exercise, performance, improvement) in this order. Use the === SECTION: <key> === marker before each section.`;
 
     const result = await generateText({
       model,
