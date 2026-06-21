@@ -31,6 +31,7 @@ ResiliPlan dirancang untuk **integrate, not replace**. Semua 14+ supported integ
 | Integration | Type | Use Case | Auth |
 |-------------|------|----------|------|
 | **NetBox** | CMDB | Auto-populate BIA dari devices, IPAM, circuits | API token |
+| **Acronis Cyber Protect** | Backup | Auto-populate BIA + RPO verification (Datacomm Cloud Backup) | OAuth2 via worker proxy |
 | **Prometheus Alertmanager** | Monitoring | SLA breach detection via webhook | HMAC-SHA256 |
 | **Keycloak** | SSO (OIDC) | Enterprise auth | OIDC client credentials |
 | **Authentik** | SSO (OIDC) | Enterprise auth | OIDC client credentials |

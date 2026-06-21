@@ -218,6 +218,7 @@ ResiliPlan dirancang untuk "integrate, not replace". Built-in support untuk 14+ 
 
 **Source (pull data INTO ResiliPlan):**
 - **NetBox** (CMDB) — auto-populate BIA dari device inventory, RTO/RPO by tier
+- **Acronis Cyber Protect** (Datacomm Cloud Backup) — auto-populate BIA + RPO verification dari real protected workloads
 - **Prometheus Alertmanager** — SLA breach detection via webhook
 - **Keycloak / Authentik** (SSO) — OIDC enterprise auth
 - **BorgBackup / restic** — backup verification
