@@ -198,6 +198,7 @@ resiliplan/
 | [CODE_OF_CONDUCT.md](./CODE_OF_CONDUCT.md) | Community guidelines |
 | [docs/architecture.md](./docs/architecture.md) | Tech architecture detail |
 | [docs/ai-integration.md](./docs/ai-integration.md) | AI layer design, provider config |
+| [docs/integrations.md](./docs/integrations.md) | Open source integrations (NetBox, Prometheus, Mattermost, etc) |
 | [docs/data-model.md](./docs/data-model.md) | Drizzle schema + ERD |
 | [docs/ui-design.md](./docs/ui-design.md) | Design system + screen catalog |
 | [docs/dr-plan.md](./docs/dr-plan.md) | ResiliPlan's own DR plan (meta-DR) |
@@ -211,6 +212,38 @@ resiliplan/
 ---
 
 ## 🎯 Fitur Unggulan
+
+### Open Source Integrations
+ResiliPlan dirancang untuk "integrate, not replace". Built-in support untuk 14+ open source tools:
+
+**Source (pull data INTO ResiliPlan):**
+- **NetBox** (CMDB) — auto-populate BIA dari device inventory, RTO/RPO by tier
+- **Prometheus Alertmanager** — SLA breach detection via webhook
+- **Keycloak / Authentik** (SSO) — OIDC enterprise auth
+- **BorgBackup / restic** — backup verification
+
+**Sink (push data FROM ResiliPlan):**
+- **Mattermost / Rocket.Chat** — ChatOps notification
+- **Cstate** (status page) — auto-update saat plan activated
+- **BookStack** — publish plan section ke wiki
+- **Grafana** — annotations + status sync
+
+**Bidirectional (both):**
+- **GLPI / Zammad / osTicket** (ITSM) — incident → plan, plan → ticket
+- **Rundeck** — trigger runbook job dari plan steps
+- **n8n** — workflow automation orchestrator
+- **Eramba** (GRC) — push ISO 22301 evidence
+
+**Generic:** Custom webhook untuk homegrown systems (HMAC-SHA256 signed).
+
+Setup via **Settings → Integrations** atau API:
+```
+POST /api/v1/integrations          # Create
+GET  /api/v1/integrations          # List (secrets masked)
+POST /api/v1/integrations/:id/sync # Trigger sync
+GET  /api/v1/integrations/catalog  # Supported types
+POST /api/v1/webhooks/in/prometheus # Inbound webhook
+```
 
 ### ISO 22301 Plan Builder
 14 section template sesuai ISO 22301:2019 + BCI GPG + NIST 800-34. Tiap section punya:

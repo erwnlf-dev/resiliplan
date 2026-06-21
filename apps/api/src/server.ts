@@ -22,6 +22,7 @@ import { billingRoutes } from './routes/billing.js';
 import { emailRoutes } from './routes/email.js';
 import { settingsRoutes } from './routes/settings.js';
 import { auditRoutes } from './routes/audit.js';
+import { integrationRoutes } from './routes/integrations.js';
 import { CSRF_COOKIE, CSRF_HEADER, createCsrfToken, csrfCookieHeader, readCookieValue, shouldCheckCsrf, verifyCsrfToken } from './auth/csrf-service.js';
 
 export async function buildServer(): Promise<FastifyInstance> {
@@ -155,6 +156,7 @@ export async function buildServer(): Promise<FastifyInstance> {
   await app.register(emailRoutes);
   await app.register(settingsRoutes);
   await app.register(auditRoutes);
+  await app.register(integrationRoutes);
 
   // ===== Root route =====
   app.get('/', async () => {
