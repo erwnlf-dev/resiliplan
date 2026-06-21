@@ -47,7 +47,7 @@ const NAV_ITEMS: { label: string; to: string; icon: React.ReactNode; group: stri
   { label: 'Email Outbox', to: '/email-outbox', icon: <Mail className="h-4 w-4" />, group: 'Navigate' },
   { label: 'Audit Trail', to: '/audit-trail', icon: <FileText className="h-4 w-4" />, group: 'Navigate' },
   { label: 'Backups', to: '/backups', icon: <ServerIcon className="h-4 w-4" />, group: 'Navigate' },
-  { label: 'Readiness', to: '/readiness', icon: <CheckCircle2 className="h-4 w-4" />, group: 'Navigate' },
+  // { label: 'Readiness', to: '/readiness', icon: <CheckCircle2 className="h-4 w-4" />, group: 'Navigate' }, // hidden 2026-06-21
   { label: 'AI Providers', to: '/ai-providers', icon: <Sparkles className="h-4 w-4" />, group: 'Navigate' },
   { label: 'Settings', to: '/settings', icon: <Settings className="h-4 w-4" />, group: 'Navigate' },
   { label: 'Security', to: '/security', icon: <Lock className="h-4 w-4" />, group: 'Navigate' },

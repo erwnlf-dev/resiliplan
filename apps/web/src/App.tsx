@@ -203,7 +203,7 @@ const SIDEBAR_GROUPS: { label: string; items: { label: string; to: string; icon:
       { label: 'Monitoring', to: '/monitoring', icon: <Activity className="h-4 w-4" /> },
       { label: 'Email Outbox', to: '/email-outbox', icon: <Mail className="h-4 w-4" /> },
       { label: 'Backups', to: '/backups', icon: <Server className="h-4 w-4" /> },
-      { label: 'Readiness', to: '/readiness', icon: <CheckCircle2 className="h-4 w-4" /> },
+      // { label: 'Readiness', to: '/readiness', icon: <CheckCircle2 className="h-4 w-4" /> }, // hidden 2026-06-21
     ],
   },
   {
@@ -334,7 +334,7 @@ function Shell({ user, onUserUpdate, onLogout }: { user: User; onUserUpdate: (us
           <Route path="/email-outbox" element={<EmailOutboxPage />} />
           <Route path="/audit-trail" element={<AuditTrailPage />} />
           <Route path="/backups" element={<BackupsPage />} />
-          <Route path="/readiness" element={<ReadinessPage />} />
+          <Route path="/readiness" element={<ReadinessPage />} /> // hidden 2026-06-21 (nav + palette commented out, route kept for direct URL)
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="/ai-providers" element={<AIProvidersPage />} />
           <Route path="/integrations" element={<IntegrationsPage />} />
