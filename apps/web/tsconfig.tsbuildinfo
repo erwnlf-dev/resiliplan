@@ -1,1 +1,1 @@
-{"root":["./src/App.tsx","./src/main.tsx","./src/components/ErrorBoundary.tsx"],"version":"5.9.3"}
+{"root":["./src/App.tsx","./src/main.tsx","./src/components/CommandPalette.tsx","./src/components/ErrorBoundary.tsx","./src/components/ui.tsx"],"version":"5.9.3"}

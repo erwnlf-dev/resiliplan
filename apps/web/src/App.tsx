@@ -1,6 +1,25 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Link, Route, Routes, useNavigate, useParams } from 'react-router-dom';
+import { Link, NavLink as RouterNavLink, Route, Routes, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { Activity, AlertTriangle, Bell, Calendar, CheckCircle2, CreditCard, Download, FileText, Home, Lock, LogOut, Mail, Moon, Save, Send, Server, Settings, Sparkles, Sun, Users } from 'lucide-react';
+import {
+  ActivityTimeline,
+  Avatar,
+  BarChartMini,
+  Button,
+  DonutChart,
+  EmptyState,
+  Modal,
+  PageHeader,
+  SearchInput,
+  Skeleton,
+  SkeletonCard,
+  SkeletonList,
+  Sparkline as SparklineIcon,
+  Tabs,
+  ToastProvider,
+  useToast,
+} from './components/ui';
+import { CommandPalette, CommandTrigger } from './components/CommandPalette';
 import * as Y from 'yjs';
 import { WebsocketProvider } from 'y-websocket';
 
@@ -117,10 +136,18 @@ export function App() {
       .finally(() => setAuthLoading(false));
   }, []);
 
-  if (authLoading) return <Centered>Loading ResiliPlan...</Centered>;
-  if (!user) return <AuthRoutes onLogin={setUser} />;
+  if (authLoading) return <Centered><span className="anim-pulse-soft text-muted-foreground">Loading ResiliPlan…</span></Centered>;
+  if (!user) return (
+    <ToastProvider>
+      <AuthRoutes onLogin={setUser} />
+    </ToastProvider>
+  );
 
-  return <Shell user={user} onUserUpdate={setUser} onLogout={() => setUser(null)} />;
+  return (
+    <ToastProvider>
+      <Shell user={user} onUserUpdate={setUser} onLogout={() => setUser(null)} />
+    </ToastProvider>
+  );
 }
 
 function AuthRoutes({ onLogin }: { onLogin: (user: User) => void }) {
@@ -133,53 +160,125 @@ function AuthRoutes({ onLogin }: { onLogin: (user: User) => void }) {
   );
 }
 
+const SIDEBAR_GROUPS: { label: string; items: { label: string; to: string; icon: React.ReactNode }[] }[] = [
+  {
+    label: 'Overview',
+    items: [
+      { label: 'Dashboard', to: '/', icon: <Home className="h-4 w-4" /> },
+    ],
+  },
+  {
+    label: 'Resilience',
+    items: [
+      { label: 'DR Plans', to: '/plans', icon: <FileText className="h-4 w-4" /> },
+      { label: 'BIA', to: '/bia', icon: <CheckCircle2 className="h-4 w-4" /> },
+      { label: 'Assets', to: '/assets', icon: <Server className="h-4 w-4" /> },
+      { label: 'Risks', to: '/risks', icon: <AlertTriangle className="h-4 w-4" /> },
+      { label: 'Drills', to: '/drills', icon: <Calendar className="h-4 w-4" /> },
+    ],
+  },
+  {
+    label: 'Operations',
+    items: [
+      { label: 'Monitoring', to: '/monitoring', icon: <Activity className="h-4 w-4" /> },
+      { label: 'Email Outbox', to: '/email-outbox', icon: <Mail className="h-4 w-4" /> },
+      { label: 'Backups', to: '/backups', icon: <Server className="h-4 w-4" /> },
+      { label: 'Readiness', to: '/readiness', icon: <CheckCircle2 className="h-4 w-4" /> },
+    ],
+  },
+  {
+    label: 'Governance',
+    items: [
+      { label: 'Users', to: '/users', icon: <Users className="h-4 w-4" /> },
+      { label: 'Notifications', to: '/notifications', icon: <Bell className="h-4 w-4" /> },
+      { label: 'Billing', to: '/billing', icon: <CreditCard className="h-4 w-4" /> },
+      { label: 'Audit Trail', to: '/audit-trail', icon: <FileText className="h-4 w-4" /> },
+    ],
+  },
+  {
+    label: 'System',
+    items: [
+      { label: 'AI Providers', to: '/ai-providers', icon: <Sparkles className="h-4 w-4" /> },
+      { label: 'Settings', to: '/settings', icon: <Settings className="h-4 w-4" /> },
+      { label: 'Security', to: '/security', icon: <Lock className="h-4 w-4" /> },
+    ],
+  },
+];
+
 function Shell({ user, onUserUpdate, onLogout }: { user: User; onUserUpdate: (user: User) => void; onLogout: () => void }) {
   async function logout() {
     await api('/api/v1/auth/logout', { method: 'POST' });
     onLogout();
   }
+  const [commandOpen, setCommandOpen] = useState(false);
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="relative min-h-screen">
+      <div className="pointer-events-none fixed inset-0 -z-10 overflow-hidden" aria-hidden>
+        <div className="absolute -top-40 -left-40 h-[36rem] w-[36rem] rounded-full bg-primary/15 blur-3xl anim-float" />
+        <div className="absolute top-1/2 -right-40 h-[32rem] w-[32rem] rounded-full bg-accent/12 blur-3xl anim-float-slow" />
+      </div>
+
       <header className="sticky top-0 z-30 border-b border-border/60 glass">
-        <div className="container flex h-14 items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-primary to-accent text-primary-foreground shadow-soft">
+        <div className="container flex h-14 items-center justify-between gap-3">
+          <Link to="/" className="flex items-center gap-2 group">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-primary via-accent to-[hsl(280,80%,65%)] text-primary-foreground shadow-soft anim-pulse-glow">
               <FileText className="h-4 w-4" />
             </div>
-            <span className="font-bold tracking-tight">ResiliPlan</span>
-            <span className="hidden rounded-full border border-border/60 bg-muted/60 px-2 py-0.5 text-xs font-medium text-muted-foreground sm:inline-block">Phase 1 Core DRP</span>
-          </div>
-          <div className="flex items-center gap-3 text-sm">
-            <span className="hidden text-muted-foreground sm:inline">{user.name} · <span className="font-medium text-foreground/80">{user.role}</span></span>
+            <span className="font-bold tracking-tight anim-gradient-text text-base">ResiliPlan</span>
+            <span className="hidden rounded-full border border-border/60 bg-muted/60 px-2 py-0.5 text-xs font-medium text-muted-foreground md:inline-block">Phase 1 Core DRP</span>
+          </Link>
+          <div className="flex items-center gap-2">
+            <CommandTrigger onClick={() => setCommandOpen(true)} />
             <ThemeToggle />
-            <button onClick={logout} className="inline-flex items-center gap-1 rounded-md border border-border/60 px-2 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground">
-              <LogOut className="h-3 w-3" /> Logout
-            </button>
+            <div className="flex items-center gap-2 rounded-lg border border-border/60 bg-card/60 px-2 py-1 backdrop-blur-sm">
+              <Avatar name={user.name} size="sm" status="online" />
+              <div className="hidden text-xs sm:block">
+                <div className="font-medium leading-4">{user.name}</div>
+                <div className="text-muted-foreground leading-3 capitalize">{user.role}</div>
+              </div>
+            </div>
+            <Button variant="ghost" size="sm" onClick={logout} leftIcon={<LogOut className="h-3.5 w-3.5" />}>
+              Logout
+            </Button>
           </div>
         </div>
       </header>
       <div className="container flex gap-6 py-6">
-        <aside className="w-56 shrink-0"><nav className="surface surface-lift sticky top-20 space-y-1 p-2 text-sm">
-          <NavLink to="/" icon={<Home className="h-4 w-4" />}>Dashboard</NavLink>
-          <NavLink to="/plans" icon={<FileText className="h-4 w-4" />}>DR Plans</NavLink>
-          <NavLink to="/bia" icon={<CheckCircle2 className="h-4 w-4" />}>BIA</NavLink>
-          <NavLink to="/assets" icon={<Server className="h-4 w-4" />}>Assets</NavLink>
-          <NavLink to="/risks" icon={<AlertTriangle className="h-4 w-4" />}>Risks</NavLink>
-          <NavLink to="/drills" icon={<Calendar className="h-4 w-4" />}>Drills</NavLink>
-          <NavLink to="/users" icon={<Users className="h-4 w-4" />}>Users</NavLink>
-          <NavLink to="/notifications" icon={<Bell className="h-4 w-4" />}>Notifications</NavLink>
-          <NavLink to="/monitoring" icon={<Activity className="h-4 w-4" />}>Monitoring</NavLink>
-          <NavLink to="/billing" icon={<CreditCard className="h-4 w-4" />}>Billing</NavLink>
-          <NavLink to="/email-outbox" icon={<Mail className="h-4 w-4" />}>Email Outbox</NavLink>
-          <NavLink to="/audit-trail" icon={<FileText className="h-4 w-4" />}>Audit Trail</NavLink>
-          <NavLink to="/backups" icon={<Server className="h-4 w-4" />}>Backups</NavLink>
-          <NavLink to="/readiness" icon={<CheckCircle2 className="h-4 w-4" />}>Readiness</NavLink>
-          <NavLink to="/settings" icon={<Settings className="h-4 w-4" />}>Settings</NavLink>
-          <NavLink to="/ai-providers" icon={<Sparkles className="h-4 w-4" />}>AI Providers</NavLink>
-          <NavLink to="/security" icon={<Lock className="h-4 w-4" />}>Security</NavLink>
-        </nav></aside>
-        <main className="flex-1 animate-fade-up"><Routes>
+        <aside className="w-60 shrink-0">
+          <nav className="surface surface-lift sticky top-20 space-y-3 p-3 max-h-[calc(100vh-6rem)] overflow-y-auto">
+            {SIDEBAR_GROUPS.map((group) => (
+              <div key={group.label} className="space-y-0.5">
+                <p className="px-2 pt-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">{group.label}</p>
+                {group.items.map((item) => (
+                  <RouterNavLink
+                    key={item.to}
+                    to={item.to}
+                    end={item.to === '/'}
+                    className={({ isActive }) =>
+                      `group relative flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium transition-all duration-200 ${
+                        isActive
+                          ? 'bg-primary/15 text-foreground'
+                          : 'text-muted-foreground hover:bg-muted hover:text-foreground hover:translate-x-0.5'
+                      }`
+                    }
+                  >
+                    {({ isActive }) => (
+                      <>
+                        {isActive && <span className="absolute left-0 top-1/2 h-5 w-0.5 -translate-y-1/2 rounded-r-full bg-primary" />}
+                        <span className={`transition-colors ${isActive ? 'text-primary' : 'text-muted-foreground/70 group-hover:text-foreground'}`}>
+                          {item.icon}
+                        </span>
+                        <span>{item.label}</span>
+                      </>
+                    )}
+                  </RouterNavLink>
+                ))}
+              </div>
+            ))}
+          </nav>
+        </aside>
+        <main className="flex-1 min-w-0"><Routes>
           <Route path="/" element={<Dashboard />} />
           <Route path="/plans" element={<PlansPage />} />
           <Route path="/plans/:id" element={<PlanEditor />} />
@@ -201,6 +300,7 @@ function Shell({ user, onUserUpdate, onLogout }: { user: User; onUserUpdate: (us
           <Route path="*" element={<NotFound />} />
         </Routes></main>
       </div>
+      <CommandPalette />
     </div>
   );
 }
